@@ -1,6 +1,6 @@
 import {
   api, setElements, ELEMENTS, ELEMENT_ORDER,
-  elLabel, elColor, elEmoji, miniProfile, meter, toast, el,
+  elLabel, elColor, elEmoji, miniProfile, meter, toast, el, escapeHtml,
 } from './api.js';
 
 const state = { settings: null, questions: [], persPage: 0, persLimit: 24, persSearch: '', lastScore: null };
@@ -148,6 +148,11 @@ async function loadPersonalities() {
   const offset = state.persPage * state.persLimit;
   const qs = new URLSearchParams({ limit: state.persLimit, offset, search: state.persSearch });
   const data = await api.get(`/api/personalities?${qs}`);
+  // אם העמוד הנוכחי התרוקן (למשל אחרי מחיקה) — חזרה לעמוד תקין אחרון
+  if (data.items.length === 0 && state.persPage > 0 && data.total > 0) {
+    state.persPage = Math.max(0, Math.ceil(data.total / state.persLimit) - 1);
+    return loadPersonalities();
+  }
   document.getElementById('persCount').textContent = data.total;
   const list = document.getElementById('personalitiesList');
   list.innerHTML = '';
@@ -372,7 +377,7 @@ function renderScoreResults(result) {
   const wrap = document.getElementById('scoreTable');
   wrap.innerHTML = '';
   const t = el('table');
-  t.innerHTML = `<thead><tr><th>משתתף</th>${ELEMENT_ORDER.map((k) => `<th>${elEmoji(k)}</th>`).join('')}<th>דומיננטי</th><th>סוג אישיות</th><th>התאמה</th></tr></thead>`;
+  t.innerHTML = `<thead><tr><th>משתתף</th>${ELEMENT_ORDER.map((k) => `<th>${escapeHtml(elEmoji(k))}</th>`).join('')}<th>דומיננטי</th><th>סוג אישיות</th><th>התאמה</th></tr></thead>`;
   const tb = el('tbody');
   result.results.forEach((r) => {
     tb.appendChild(el('tr', {}, [

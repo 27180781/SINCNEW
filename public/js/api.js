@@ -1,19 +1,41 @@
 // לקוח API משותף + כלי עזר
 export const ELEMENT_ORDER = ['fire', 'water', 'air', 'earth'];
 
-async function req(method, path, body) {
+// טוקן ניהול אופציונלי (רלוונטי רק אם השרת הוגדר עם ADMIN_TOKEN)
+let adminToken = '';
+try { adminToken = localStorage.getItem('adminToken') || ''; } catch { /* no-op */ }
+export function setAdminToken(t) {
+  adminToken = t || '';
+  try { localStorage.setItem('adminToken', adminToken); } catch { /* no-op */ }
+}
+
+async function req(method, path, body, retried) {
   const opts = { method, headers: {} };
+  if (adminToken) opts.headers['x-admin-token'] = adminToken;
   if (body !== undefined) {
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
   }
   const res = await fetch(path, opts);
+  // אם השרת מוגן ואין טוקן תקין — בקשת טוקן וניסיון חוזר פעם אחת
+  if (res.status === 401 && !retried && typeof prompt === 'function') {
+    const t = prompt('נדרש טוקן ניהול (הוגדר בשרת כמשתנה הסביבה ADMIN_TOKEN):', adminToken || '');
+    if (t) { setAdminToken(t); return req(method, path, body, true); }
+  }
   const text = await res.text();
   let data;
   try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text }; }
   if (!res.ok) throw new Error(data.error || `שגיאה ${res.status}`);
   return data;
 }
+
+// בריחת HTML — לשימוש בכל מקום שבו נתוני משתמש/מאגר נכנסים ל-innerHTML
+export function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+}
+// אימות ערך צבע (מונע הזרקת CSS דרך שדה הצבע של יסוד)
+const SAFE_COLOR = /^#(?:[0-9a-fA-F]{3,8})$|^[a-zA-Z]{1,20}$/;
+export function safeColor(c) { return SAFE_COLOR.test(String(c || '')) ? String(c) : '#888888'; }
 
 export const api = {
   get: (p) => req('GET', p),
@@ -38,7 +60,7 @@ export function setElements(list) {
 }
 
 export function elLabel(key) { return ELEMENTS[key]?.label || key; }
-export function elColor(key) { return ELEMENTS[key]?.color || '#888'; }
+export function elColor(key) { return safeColor(ELEMENTS[key]?.color); }
 export function elEmoji(key) { return ELEMENTS[key]?.emoji || ''; }
 
 // יוצר פס-פרופיל מיני (התפלגות אחוזים בצבעי היסודות)
@@ -55,17 +77,29 @@ export function miniProfile(profile) {
   return wrap;
 }
 
-// מד אחוזים גדול
+// מד אחוזים גדול — נבנה ב-DOM (ללא innerHTML) כדי למנוע XSS דרך תווית/אימוג'י יסוד
 export function meter(key, value) {
-  const el = document.createElement('div');
-  el.className = 'meter';
-  el.innerHTML = `
-    <div class="meter-head">
-      <span>${elEmoji(key)} ${elLabel(key)}</span>
-      <strong>${value}%</strong>
-    </div>
-    <div class="bar"><span style="width:${value}%;background:${elColor(key)}"></span></div>`;
-  return el;
+  const pct = Math.max(0, Math.min(100, Number(value) || 0));
+  const wrap = document.createElement('div');
+  wrap.className = 'meter';
+
+  const head = document.createElement('div');
+  head.className = 'meter-head';
+  const left = document.createElement('span');
+  left.textContent = `${elEmoji(key)} ${elLabel(key)}`;
+  const right = document.createElement('strong');
+  right.textContent = `${value}%`;
+  head.append(left, right);
+
+  const bar = document.createElement('div');
+  bar.className = 'bar';
+  const fill = document.createElement('span');
+  fill.style.width = pct + '%';
+  fill.style.background = elColor(key); // עבר דרך safeColor
+  bar.appendChild(fill);
+
+  wrap.append(head, bar);
+  return wrap;
 }
 
 let toastTimer;

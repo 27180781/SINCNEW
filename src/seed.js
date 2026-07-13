@@ -190,8 +190,9 @@ function makePersonality(profile) {
 
   let name;
   if (spread <= 10) {
-    // מאוזן בין כל היסודות
-    const idx = (fire + water + air + earth + profile[top]) % BALANCED_NAMES.length;
+    // מאוזן בין כל היסודות — הגיוון מבוסס על סדר היסודות (לא על ערכים שהם כפולות של הצעד,
+    // אחרת האינדקס היה קבוע ב-0 עבור צעד 10 וכל הסוגים המאוזנים היו מקבלים שם זהה)
+    const idx = (ELEMENT_KEYS.indexOf(top) + ELEMENT_KEYS.indexOf(second) * 2) % BALANCED_NAMES.length;
     name = BALANCED_NAMES[idx];
   } else {
     const nounList = ARCHETYPE_NOUNS[top];

@@ -128,6 +128,43 @@ test('matchPersonality: מאגר ריק => null', () => {
   assert.equal(m.best, null);
 });
 
+test('פענוח תשובה: מספר עם אפס מוביל (01 -> אינדקס 1)', () => {
+  assert.equal(resolveAnswerToOption(QUESTIONS[0], '01').element, 'fire');
+  assert.equal(resolveAnswerToOption(QUESTIONS[0], '02').element, 'water');
+});
+
+test('נרמול תשובות: מפתחות מספריים הם 1-מבוססים ו-0 מדולג', () => {
+  const map = normalizeAnswers({ 1: 'A', 0: 'B' }, QUESTIONS);
+  assert.equal(map.get('q1'), 'A');
+  assert.equal(map.size, 1); // '0' אינו תקין ולא נכנס
+});
+
+test('משקל 0 נשמר (לא מומר ל-1) ואינו תורם לספירה', () => {
+  const WQ = [{ id: 'w1', order: 1, options: [
+    { id: 'w1o1', element: 'fire', weight: 0 },
+    { id: 'w1o2', element: 'water', weight: 2 },
+  ] }];
+  const s0 = scoreParticipant({ answers: { w1: 'w1o1' } }, WQ);
+  assert.equal(s0.total, 0);
+  assert.equal(s0.dominant, null);
+  const s2 = scoreParticipant({ answers: { w1: 'w1o2' } }, WQ);
+  assert.equal(s2.counts.water, 2);
+  assert.equal(s2.percentages.water, 100);
+});
+
+test('משקל שלילי נחתך ל-0 (לא שובר אחוזים)', () => {
+  const NQ = [{ id: 'n1', order: 1, options: [
+    { id: 'n1o1', element: 'fire', weight: -5 },
+    { id: 'n1o2', element: 'water', weight: 3 },
+  ] }];
+  const s = scoreParticipant({ answers: { n1: 'n1o1', /* לא נענה n2 */ } }, NQ);
+  assert.equal(s.counts.fire, 0);
+  assert.equal(s.total, 0);
+  const both = scoreParticipant({ answers: ['n1o2'] }, NQ);
+  assert.equal(both.counts.water, 3);
+  assert.equal(both.percentages.water, 100);
+});
+
 test('scoreBatch: מחשב תוצאות + התאמות + ממוצעים', () => {
   const personalities = [
     { id: 'a', name: 'אש', profile: { fire: 100, water: 0, air: 0, earth: 0 } },

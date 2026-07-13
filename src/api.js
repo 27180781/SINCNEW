@@ -30,13 +30,31 @@ function sanitizeQuestion(input, fallbackOrder) {
     options: [],
   };
   const opts = Array.isArray(input.options) ? input.options : [];
-  q.options = opts.map((o, i) => ({
-    id: o.id || `${q.id}o${i + 1}`,
-    text: String(o.text || '').trim(),
-    element: String(o.element || '').trim(),
-    weight: o.weight == null ? 1 : Number(o.weight) || 1,
-  }));
+  q.options = opts.map((o, i) => {
+    let weight = o.weight == null ? 1 : Number(o.weight);
+    if (!Number.isFinite(weight)) weight = 1; // ערך לא-מספרי -> ברירת מחדל
+    if (weight < 0) weight = 0; // משקל שלילי אינו חוקי
+    return {
+      id: o.id || `${q.id}o${i + 1}`,
+      text: String(o.text || '').trim(),
+      element: String(o.element || '').trim(),
+      weight, // משקל 0 נשמר כפי שהוא (בעבר הומר בטעות ל-1)
+    };
+  });
   return q;
+}
+
+// ולידציה של הגדרות היסודות (מונע XSS/הזרקת CSS דרך תווית/אימוג'י/צבע)
+const SAFE_COLOR = /^#(?:[0-9a-fA-F]{3,8})$|^[a-zA-Z]{1,20}$/;
+function sanitizeElements(elements, fallback = []) {
+  if (!Array.isArray(elements)) return fallback;
+  return elements.map((e, i) => ({
+    key: String(e.key || fallback[i]?.key || `el${i}`).slice(0, 20),
+    label: String(e.label ?? '').slice(0, 40),
+    color: SAFE_COLOR.test(String(e.color || '')) ? String(e.color) : (fallback[i]?.color || '#888888'),
+    emoji: String(e.emoji ?? '').slice(0, 8),
+    trait: String(e.trait ?? '').slice(0, 200),
+  }));
 }
 
 // ולידציה של סוג אישיות
@@ -75,7 +93,9 @@ export function createRouter(store) {
     state.settings = {
       ...cur,
       ...body,
-      elements: Array.isArray(body.elements) ? body.elements : cur.elements,
+      title: body.title != null ? String(body.title).slice(0, 200) : cur.title,
+      subtitle: body.subtitle != null ? String(body.subtitle).slice(0, 200) : cur.subtitle,
+      elements: Array.isArray(body.elements) ? sanitizeElements(body.elements, cur.elements) : cur.elements,
       matching: { ...cur.matching, ...(body.matching || {}) },
     };
     store.save();
@@ -292,21 +312,25 @@ export function createRouter(store) {
     const batches = state.batches || [];
     let participantCount = 0;
     const elementSum = Object.fromEntries(keys.map((k) => [k, 0]));
-    const personalityTally = {};
+    const personalityTally = {}; // לפי מזהה (שמות עשויים לחזור בין סוגים שונים)
     for (const b of batches) {
       for (const r of b.result?.results || []) {
         participantCount += 1;
         for (const k of keys) elementSum[k] += r.percentagesRaw?.[k] || 0;
-        if (r.match) personalityTally[r.match.name] = (personalityTally[r.match.name] || 0) + 1;
+        if (r.match) {
+          const id = r.match.id;
+          if (!personalityTally[id]) personalityTally[id] = { name: r.match.name, count: 0 };
+          personalityTally[id].count += 1;
+        }
       }
     }
     const elementAverages = Object.fromEntries(
       keys.map((k) => [k, participantCount ? Math.round((elementSum[k] / participantCount) * 10) / 10 : 0])
     );
-    const topPersonalities = Object.entries(personalityTally)
-      .sort((a, b) => b[1] - a[1])
+    const topPersonalities = Object.values(personalityTally)
+      .sort((a, b) => b.count - a.count)
       .slice(0, 10)
-      .map(([name, count]) => ({ name, count }));
+      .map(({ name, count }) => ({ name, count }));
 
     return ok({
       questions: (state.questions || []).length,
@@ -341,7 +365,22 @@ export function createRouter(store) {
 
   add('POST', '/api/import', ({ body }) => {
     if (!body || typeof body !== 'object' || !body.settings) return err('מבנה מאגר לא תקין');
-    store.replace(body);
+    // נרמול: מבטיח שכל הקולקציות הן מערכים, אחרת נקודות הכתיבה יקרסו והמאגר יושחת
+    const base = defaultSettings();
+    const settings = {
+      ...base,
+      ...body.settings,
+      elements: sanitizeElements(body.settings.elements, base.elements),
+      matching: { ...base.matching, ...(body.settings.matching || {}) },
+    };
+    const normalized = {
+      version: body.version || 1,
+      settings,
+      questions: Array.isArray(body.questions) ? body.questions : [],
+      personalities: Array.isArray(body.personalities) ? body.personalities : [],
+      batches: Array.isArray(body.batches) ? body.batches : [],
+    };
+    store.replace(normalized);
     return ok({ imported: true });
   });
 

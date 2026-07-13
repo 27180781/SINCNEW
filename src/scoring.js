@@ -55,10 +55,11 @@ export function resolveAnswerToOption(question, answerValue) {
   // 3) מפתח יסוד ישיר (fire/water/air/earth)
   if (r.byElement.has(raw)) return r.byElement.get(raw);
   if (r.byElement.has(raw.toLowerCase())) return r.byElement.get(raw.toLowerCase());
-  // 4) אינדקס מספרי (קודם 1-מבוסס, אחר כך 0-מבוסס)
+  // 4) אינדקס מספרי (קודם 1-מבוסס, אחר כך 0-מבוסס). נרמול אפסים מובילים ('01' -> '1').
   if (/^-?\d+$/.test(raw)) {
-    if (r.byIndex1.has(raw)) return r.byIndex1.get(raw);
-    if (r.byIndex0.has(raw)) return r.byIndex0.get(raw);
+    const n = String(parseInt(raw, 10));
+    if (r.byIndex1.has(n)) return r.byIndex1.get(n);
+    if (r.byIndex0.has(n)) return r.byIndex0.get(n);
   }
   return null;
 }
@@ -87,8 +88,9 @@ export function normalizeAnswers(answers, questions) {
         // ניסיון לפרש "q3" / "3" כאינדקס לפי סדר
         const m = /^q?\s*(\d+)$/i.exec(String(key));
         if (m) {
+          // מפתחות מספריים הם 1-מבוססים (q1..qN); '0' אינו תקין ומדולג
           const idx = parseInt(m[1], 10);
-          q = questions[idx - 1] || questions[idx] || null;
+          q = idx >= 1 ? (questions[idx - 1] || null) : null;
         }
       }
       if (q) map.set(q.id, val);
@@ -140,6 +142,7 @@ export function scoreParticipant(participant, questions, options = {}) {
     if (opt && opt.element && counts[opt.element] != null) {
       let w = opt.weight == null ? 1 : Number(opt.weight);
       if (!Number.isFinite(w)) w = 1;
+      if (w < 0) w = 0; // משקל שלילי היה שובר את חישוב האחוזים (ערכים >100 או <0)
       counts[opt.element] += w;
       answered += 1;
       perQuestion.push({ questionId: q.id, answer: rawVal, element: opt.element, weight: w });
@@ -243,11 +246,13 @@ export function scoreBatch(participants, questions, personalities, options = {})
 
   // אגרגציה קבוצתית: ממוצע אחוזי היסודות + פיזור סוגי אישיות
   const aggregate = emptyCounts(keys);
-  const personalityTally = {};
+  const personalityTally = {}; // לפי מזהה סוג האישיות (שמות עשויים לחזור בין סוגים)
   for (const r of results) {
     for (const k of keys) aggregate[k] += r.percentagesRaw[k] || 0;
     if (r.match) {
-      personalityTally[r.match.name] = (personalityTally[r.match.name] || 0) + 1;
+      const id = r.match.id;
+      if (!personalityTally[id]) personalityTally[id] = { name: r.match.name, count: 0 };
+      personalityTally[id].count += 1;
     }
   }
   const averages = {};

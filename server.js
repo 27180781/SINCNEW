@@ -18,6 +18,10 @@ const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = join(__dirname, 'public');
 const DATA_FILE = process.env.DATA_FILE || join(__dirname, 'data', 'db.json');
 
+// שער הרשאה אופציונלי: אם מוגדר ADMIN_TOKEN, כל נתיב שאינו ציבורי דורש כותרת תואמת.
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+const PUBLIC_API = new Set(['GET /api/health', 'GET /api/config', 'POST /api/score']);
+
 // --- אתחול המאגר ---
 const store = new Store(DATA_FILE);
 store.init(buildSeedData());
@@ -75,8 +79,11 @@ function matchRoute(method, pathname) {
     const params = {};
     let matched = true;
     for (let i = 0; i < rParts.length; i++) {
-      if (rParts[i].startsWith(':')) params[rParts[i].slice(1)] = decodeURIComponent(pParts[i]);
-      else if (rParts[i] !== pParts[i]) {
+      if (rParts[i].startsWith(':')) {
+        // decodeURIComponent זורק על קידוד אחוזים פגום (למשל '%') — לא לתת לזה לקרוס
+        try { params[rParts[i].slice(1)] = decodeURIComponent(pParts[i]); }
+        catch { params[rParts[i].slice(1)] = pParts[i]; }
+      } else if (rParts[i] !== pParts[i]) {
         matched = false;
         break;
       }
@@ -113,11 +120,21 @@ async function serveStatic(res, pathname) {
 }
 
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  let url;
+  try {
+    url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  } catch {
+    return sendJson(res, 400, { error: 'בקשה לא תקינה' });
+  }
   const pathname = url.pathname;
 
   // API
   if (pathname.startsWith('/api/')) {
+    // שער הרשאה אופציונלי לנתיבי ניהול
+    if (ADMIN_TOKEN && !PUBLIC_API.has(`${req.method} ${pathname}`)) {
+      const token = req.headers['x-admin-token'] || url.searchParams.get('token') || '';
+      if (token !== ADMIN_TOKEN) return sendJson(res, 401, { error: 'נדרשת הרשאת ניהול' });
+    }
     const route = matchRoute(req.method, pathname);
     if (!route) return sendJson(res, 404, { error: `נתיב לא נמצא: ${req.method} ${pathname}` });
 
@@ -150,5 +167,7 @@ server.listen(PORT, () => {
   console.log(`\n  🌿 מערכת ארבעת היסודות פועלת`);
   console.log(`     מבחן:      http://localhost:${PORT}/`);
   console.log(`     ניהול:     http://localhost:${PORT}/admin`);
-  console.log(`     נתונים:    ${DATA_FILE}\n`);
+  console.log(`     נתונים:    ${DATA_FILE}`);
+  if (ADMIN_TOKEN) console.log('     🔒 ה-API מוגן ב-ADMIN_TOKEN\n');
+  else console.log('     ⚠  ADMIN_TOKEN לא הוגדר — ה-API פתוח (מתאים לפיתוח מקומי בלבד)\n');
 });
