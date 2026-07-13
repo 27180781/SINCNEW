@@ -6,6 +6,8 @@
 import { scoreBatch, DEFAULT_ELEMENT_KEYS } from './scoring.js';
 import { buildSeedData, generatePersonalities, defaultSettings, buildSampleQuestions, newId } from './seed.js';
 import { validateGamePayload, gamePayloadToParticipants } from './game.js';
+import { parseXlsx } from './xlsx.js';
+import { parseCsv, rowsToQuestions } from './mapping.js';
 
 const ok = (body, status = 200) => ({ status, body });
 const err = (message, status = 400) => ({ status, body: { error: message } });
@@ -155,6 +157,49 @@ export function createRouter(repo) {
     const clean = list.map((q, i) => sanitizeQuestion(q, i + 1));
     await repo.setQuestions(clean);
     return ok(clean);
+  });
+
+  // ייבוא מיפוי יסודות מקובץ Excel/CSV (queId × תשובה→יסוד)
+  add('POST', '/api/questions/import-mapping', async ({ body }) => {
+    let rows;
+    try {
+      if (Array.isArray(body.rows)) rows = body.rows;
+      else if (typeof body.csv === 'string') rows = parseCsv(body.csv);
+      else if (typeof body.dataBase64 === 'string') {
+        const buf = Buffer.from(body.dataBase64, 'base64');
+        // זיהוי xlsx (חתימת ZIP 'PK') מול csv טקסטואלי
+        if (buf[0] === 0x50 && buf[1] === 0x4b) rows = parseXlsx(buf);
+        else rows = parseCsv(buf.toString('utf8'));
+      } else return err('נדרש קובץ (dataBase64) או שדה rows/csv');
+    } catch (e) {
+      return err('כשל בקריאת הקובץ: ' + (e?.message || e));
+    }
+
+    const settings = await repo.getSettings();
+    const validKeys = elementKeysFrom(settings);
+    const labelToKey = {};
+    for (const el of settings.elements || []) labelToKey[el.label] = el.key;
+
+    const existing = await repo.listQuestions();
+    const existingByQueId = {};
+    for (const q of existing) if (q.queId != null) existingByQueId[q.queId] = q;
+
+    const { questions, warnings } = rowsToQuestions(rows, { validKeys, labelToKey, existingByQueId });
+    if (!questions.length) return err('לא נמצאו שאלות תקינות בקובץ. ' + warnings.join(' '));
+
+    const mode = body.mode === 'merge' ? 'merge' : 'replace';
+    let finalList;
+    if (mode === 'merge') {
+      const map = new Map();
+      for (const q of existing) map.set(q.queId != null ? `q:${q.queId}` : `id:${q.id}`, q);
+      for (const q of questions) map.set(`q:${q.queId}`, q);
+      finalList = [...map.values()];
+    } else {
+      finalList = questions;
+    }
+    const clean = finalList.map((q, i) => sanitizeQuestion({ ...q, order: i + 1 }, i + 1));
+    await repo.setQuestions(clean);
+    return ok({ imported: questions.length, total: clean.length, mode, warnings }, 201);
   });
 
   // ---- סוגי אישיות ----

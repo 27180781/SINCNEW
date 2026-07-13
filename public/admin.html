@@ -20,6 +20,7 @@
     <div class="tabs" id="tabs">
       <button data-tab="dashboard" class="active">לוח בקרה</button>
       <button data-tab="questions">שאלות</button>
+      <button data-tab="mapping">מיפוי יסודות</button>
       <button data-tab="personalities">סוגי אישיות</button>
       <button data-tab="participants">שיוך משתתפים</button>
       <button data-tab="settings">הגדרות</button>
@@ -48,6 +49,32 @@
         </div>
         <p><small>לכל שאלה 4 אפשרויות, וכל אפשרות ממופה ליסוד. זהו "השיוך של כל שאלה לערך".</small></p>
         <div id="questionsList"></div>
+      </div>
+    </section>
+
+    <!-- מיפוי יסודות -->
+    <section class="tab-panel" id="tab-mapping">
+      <div class="card">
+        <div class="row">
+          <h2 style="margin:0">מיפוי יסודות — לפי מספר שאלה</h2>
+          <div class="spacer"></div>
+          <input type="file" id="mappingFile" accept=".xlsx,.csv" style="display:none" />
+          <button class="primary" id="importMappingBtn">⬆ העלאת קובץ Excel/CSV</button>
+          <button id="downloadTemplateBtn" class="ghost">הורדת תבנית</button>
+        </div>
+        <p><small>מבנה הקובץ: עמודה ראשונה = <strong>מספר שאלה</strong> (queId), ואחריה היסוד שכל תשובה מייצגת
+          (תשובה 1, 2, 3, 4). לדוגמה שורה: <code>7 · water · fire · earth · air</code>.
+          ערכי יסוד: <code>fire / water / air / earth</code> או <code>אש / מים / רוח / עפר</code>.</small></p>
+      </div>
+      <div class="card">
+        <div class="row">
+          <h3 style="margin:0">עריכה שאלה-שאלה</h3>
+          <span class="badge" id="mappingCount">0</span>
+          <div class="spacer"></div>
+          <button id="addMappingRowBtn">+ שאלה</button>
+          <button class="primary" id="saveMappingBtn">שמירת המיפוי</button>
+        </div>
+        <div id="mappingGrid" style="overflow-x:auto"></div>
       </div>
     </section>
 

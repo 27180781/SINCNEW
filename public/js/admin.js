@@ -3,7 +3,7 @@ import {
   elLabel, elColor, elEmoji, miniProfile, meter, toast, el, escapeHtml,
 } from './api.js';
 
-const state = { settings: null, questions: [], persPage: 0, persLimit: 24, persSearch: '', lastScore: null };
+const state = { settings: null, questions: [], persPage: 0, persLimit: 24, persSearch: '', lastScore: null, mapping: [] };
 
 // ---------------- מודאל ----------------
 const modalBack = document.getElementById('modalBack');
@@ -156,6 +156,127 @@ async function delQuestion(q) {
   await api.del(`/api/questions/${q.id}`); toast('נמחק'); loadQuestions();
 }
 document.getElementById('addQuestionBtn').addEventListener('click', () => editQuestion(null));
+
+// ============================================================
+//  מיפוי יסודות (רשת עריכה + ייבוא Excel/CSV)
+// ============================================================
+async function loadMapping() {
+  const qs = await api.get('/api/questions');
+  state.mapping = qs.map((q) => ({
+    id: q.id,
+    queId: q.queId ?? null,
+    text: q.text || '',
+    options: (q.options || []).map((o) => ({ id: o.id, answerId: o.answerId ?? null, text: o.text || '', element: o.element || '', weight: o.weight ?? 1 })),
+  }));
+  renderMappingGrid();
+}
+
+function mappingElementSelect(value, onChange) {
+  const sel = el('select', { style: 'min-width:96px' });
+  sel.appendChild(el('option', { value: '' }, '—'));
+  ELEMENT_ORDER.forEach((k) => {
+    const o = el('option', { value: k }, `${elEmoji(k)} ${elLabel(k)}`);
+    if (k === value) o.selected = true;
+    sel.appendChild(o);
+  });
+  const paint = () => { sel.style.color = sel.value ? elColor(sel.value) : ''; sel.style.fontWeight = sel.value ? '700' : ''; };
+  paint();
+  sel.addEventListener('change', () => { paint(); onChange(sel.value); });
+  return sel;
+}
+
+function renderMappingGrid() {
+  const box = document.getElementById('mappingGrid');
+  box.innerHTML = '';
+  const qs = state.mapping;
+  document.getElementById('mappingCount').textContent = qs.length;
+  if (!qs.length) { box.appendChild(el('div', { class: 'empty' }, 'אין שאלות. העלו קובץ או הוסיפו שאלה.')); return; }
+  const maxOpts = Math.max(4, ...qs.map((q) => (q.options || []).length));
+
+  const t = el('table');
+  let head = '<thead><tr><th>מס׳ שאלה</th>';
+  for (let i = 1; i <= maxOpts; i++) head += `<th>תשובה ${i}</th>`;
+  head += '<th>טקסט (רשות)</th><th></th></tr></thead>';
+  t.innerHTML = head;
+  const tb = el('tbody');
+  qs.forEach((q, ri) => {
+    const tr = el('tr');
+    tr.appendChild(el('td', {}, el('input', {
+      type: 'number', value: q.queId ?? '', style: 'width:70px',
+      oninput: (e) => { q.queId = e.target.value === '' ? null : Number(e.target.value); },
+    })));
+    for (let c = 0; c < maxOpts; c++) {
+      if (!q.options[c]) q.options[c] = { answerId: c + 1, text: '', element: '', weight: 1 };
+      const opt = q.options[c];
+      if (opt.answerId == null) opt.answerId = c + 1;
+      tr.appendChild(el('td', {}, mappingElementSelect(opt.element, (v) => { opt.element = v; })));
+    }
+    tr.appendChild(el('td', {}, el('input', {
+      value: q.text || '', style: 'min-width:150px', placeholder: `שאלה ${q.queId ?? ''}`,
+      oninput: (e) => { q.text = e.target.value; },
+    })));
+    tr.appendChild(el('td', {}, el('button', {
+      class: 'small danger', onclick: () => { state.mapping.splice(ri, 1); renderMappingGrid(); },
+    }, '✕')));
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  box.appendChild(t);
+}
+
+document.getElementById('addMappingRowBtn').addEventListener('click', () => {
+  const maxQ = Math.max(0, ...state.mapping.map((q) => q.queId || 0));
+  state.mapping.push({ queId: maxQ + 1, text: '', options: [1, 2, 3, 4].map((a) => ({ answerId: a, text: '', element: '', weight: 1 })) });
+  renderMappingGrid();
+});
+
+document.getElementById('saveMappingBtn').addEventListener('click', async () => {
+  const payload = state.mapping.map((q, i) => ({
+    id: q.id,
+    queId: q.queId,
+    order: i + 1,
+    text: q.text || `שאלה ${q.queId ?? i + 1}`,
+    options: q.options.map((o, ci) => ({ id: o.id, answerId: o.answerId ?? ci + 1, text: o.text || '', element: o.element || '', weight: 1 })),
+  }));
+  try {
+    await api.put('/api/questions', payload);
+    toast('המיפוי נשמר');
+    loadMapping();
+  } catch (e) { toast(e.message, true); }
+});
+
+function arrayBufferToBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  return btoa(bin);
+}
+
+document.getElementById('importMappingBtn').addEventListener('click', () => document.getElementById('mappingFile').click());
+document.getElementById('mappingFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const mode = confirm('להחליף את כל השאלות הקיימות במיפוי מהקובץ?\n\nאישור = החלפה מלאה · ביטול = מיזוג לפי מספר שאלה') ? 'replace' : 'merge';
+  try {
+    const buf = await file.arrayBuffer();
+    const r = await api.post('/api/questions/import-mapping', { filename: file.name, dataBase64: arrayBufferToBase64(buf), mode });
+    toast(`יובאו ${r.imported} שאלות (${r.mode === 'replace' ? 'החלפה' : 'מיזוג'})`);
+    if (r.warnings && r.warnings.length) alert('אזהרות:\n' + r.warnings.slice(0, 25).join('\n'));
+    loadMapping();
+  } catch (err) {
+    toast(err.message, true);
+  }
+  e.target.value = '';
+});
+
+document.getElementById('downloadTemplateBtn').addEventListener('click', () => {
+  const csv = 'מספר שאלה,תשובה 1,תשובה 2,תשובה 3,תשובה 4\n7,water,fire,earth,air\n8,fire,earth,air,water\n';
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = el('a', { href: URL.createObjectURL(blob), download: 'mapping-template.csv' });
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
 
 // ============================================================
 //  סוגי אישיות
@@ -520,6 +641,7 @@ document.getElementById('resetAllBtn').addEventListener('click', async () => {
 const loaders = {
   dashboard: loadDashboard,
   questions: loadQuestions,
+  mapping: loadMapping,
   personalities: () => loadPersonalities(),
   participants: () => { renderFormatHelp(); loadIntegration(); loadBatches(); if (!state.questions.length) api.get('/api/questions').then((q) => { state.questions = q; }); },
   settings: loadSettings,
