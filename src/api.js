@@ -1,23 +1,24 @@
 // ============================================================================
-//  שכבת ה-API — מגדירה את כל ה-endpoints ומחברת בין ה-Store למנוע השקלול
+//  שכבת ה-API — מגדירה את כל ה-endpoints ומחברת בין ה-repository למנוע השקלול
+//  כל ה-handlers אסינכרוניים ופועלים מול repo (Postgres או JSON, אותו ממשק).
 // ============================================================================
 
-import { scoreBatch, scoreParticipant, matchPersonality, DEFAULT_ELEMENT_KEYS } from './scoring.js';
+import { scoreBatch, DEFAULT_ELEMENT_KEYS } from './scoring.js';
 import { buildSeedData, generatePersonalities, defaultSettings, buildSampleQuestions, newId } from './seed.js';
 
 const ok = (body, status = 200) => ({ status, body });
 const err = (message, status = 400) => ({ status, body: { error: message } });
 
-function elementKeysFrom(state) {
-  const keys = (state.settings?.elements || []).map((e) => e.key);
+function elementKeysFrom(settings) {
+  const keys = (settings?.elements || []).map((e) => e.key);
   return keys.length ? keys : DEFAULT_ELEMENT_KEYS;
 }
 
-function matchOptions(state) {
+function matchOptions(settings) {
   return {
-    elementKeys: elementKeysFrom(state),
-    metric: state.settings?.matching?.metric || 'euclidean',
-    topN: state.settings?.matching?.topN || 3,
+    elementKeys: elementKeysFrom(settings),
+    metric: settings?.matching?.metric || 'euclidean',
+    topN: settings?.matching?.topN || 3,
   };
 }
 
@@ -71,26 +72,22 @@ function sanitizePersonality(input, keys) {
     name: String(input.name || 'ללא שם').trim(),
     description: String(input.description || '').trim(),
     profile,
-    profileSum: Math.round(sum),
     generated: !!input.generated,
   };
 }
 
-export function createRouter(store) {
-  const S = () => store.get();
-
+export function createRouter(repo) {
   const routes = [];
   const add = (method, pattern, handler) => routes.push({ method, pattern, handler });
 
   // ---- Health ----
-  add('GET', '/api/health', () => ok({ ok: true, time: new Date().toISOString() }));
+  add('GET', '/api/health', async () => ok({ ok: true, storage: repo.kind, time: new Date().toISOString() }));
 
   // ---- הגדרות ----
-  add('GET', '/api/settings', () => ok(S().settings));
-  add('PUT', '/api/settings', ({ body }) => {
-    const state = S();
-    const cur = state.settings;
-    state.settings = {
+  add('GET', '/api/settings', async () => ok(await repo.getSettings()));
+  add('PUT', '/api/settings', async ({ body }) => {
+    const cur = await repo.getSettings();
+    const next = {
       ...cur,
       ...body,
       title: body.title != null ? String(body.title).slice(0, 200) : cur.title,
@@ -98,192 +95,149 @@ export function createRouter(store) {
       elements: Array.isArray(body.elements) ? sanitizeElements(body.elements, cur.elements) : cur.elements,
       matching: { ...cur.matching, ...(body.matching || {}) },
     };
-    store.save();
-    return ok(state.settings);
+    await repo.saveSettings(next);
+    return ok(next);
   });
 
   // ---- קונפיגורציה למבחן הציבורי (ללא חשיפת מיפוי היסודות) ----
-  add('GET', '/api/config', () => {
-    const state = S();
+  add('GET', '/api/config', async () => {
+    const [settings, questions] = await Promise.all([repo.getSettings(), repo.listQuestions()]);
     return ok({
-      title: state.settings.title,
-      subtitle: state.settings.subtitle,
-      elements: state.settings.elements,
-      questions: (state.questions || [])
-        .slice()
-        .sort((a, b) => (a.order || 0) - (b.order || 0))
-        .map((q) => ({
-          id: q.id,
-          text: q.text,
-          options: (q.options || []).map((o) => ({ id: o.id, text: o.text })),
-        })),
+      title: settings.title,
+      subtitle: settings.subtitle,
+      elements: settings.elements,
+      questions: questions.map((q) => ({
+        id: q.id,
+        text: q.text,
+        options: (q.options || []).map((o) => ({ id: o.id, text: o.text })),
+      })),
     });
   });
 
   // ---- שאלות ----
-  add('GET', '/api/questions', () => {
-    const list = (S().questions || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
-    return ok(list);
-  });
+  add('GET', '/api/questions', async () => ok(await repo.listQuestions()));
 
-  add('POST', '/api/questions', ({ body }) => {
-    const state = S();
-    const order = (state.questions?.length || 0) + 1;
-    const q = sanitizeQuestion(body, order);
+  add('POST', '/api/questions', async ({ body }) => {
+    const count = (await repo.listQuestions()).length;
+    const q = sanitizeQuestion(body, count + 1);
     if (!q.text) return err('טקסט השאלה חסר');
-    state.questions.push(q);
-    store.save();
+    await repo.addQuestion(q);
     return ok(q, 201);
   });
 
-  add('PUT', '/api/questions/:id', ({ params, body }) => {
-    const state = S();
-    const idx = state.questions.findIndex((q) => q.id === params.id);
-    if (idx < 0) return err('שאלה לא נמצאה', 404);
-    const updated = sanitizeQuestion({ ...state.questions[idx], ...body, id: params.id }, state.questions[idx].order);
-    state.questions[idx] = updated;
-    store.save();
+  add('PUT', '/api/questions/:id', async ({ params, body }) => {
+    const existing = await repo.getQuestion(params.id);
+    if (!existing) return err('שאלה לא נמצאה', 404);
+    const updated = sanitizeQuestion({ ...existing, ...body, id: params.id }, existing.order);
+    await repo.updateQuestion(params.id, updated);
     return ok(updated);
   });
 
-  add('DELETE', '/api/questions/:id', ({ params }) => {
-    const state = S();
-    const before = state.questions.length;
-    state.questions = state.questions.filter((q) => q.id !== params.id);
-    if (state.questions.length === before) return err('שאלה לא נמצאה', 404);
-    store.save();
+  add('DELETE', '/api/questions/:id', async ({ params }) => {
+    const okDel = await repo.deleteQuestion(params.id);
+    if (!okDel) return err('שאלה לא נמצאה', 404);
     return ok({ deleted: params.id });
   });
 
   // החלפת כל השאלות בבת אחת (סדר/ייבוא)
-  add('PUT', '/api/questions', ({ body }) => {
-    const state = S();
+  add('PUT', '/api/questions', async ({ body }) => {
     const list = Array.isArray(body) ? body : body.questions;
     if (!Array.isArray(list)) return err('נדרש מערך שאלות');
-    state.questions = list.map((q, i) => sanitizeQuestion(q, i + 1));
-    store.save();
-    return ok(state.questions);
+    const clean = list.map((q, i) => sanitizeQuestion(q, i + 1));
+    await repo.setQuestions(clean);
+    return ok(clean);
   });
 
   // ---- סוגי אישיות ----
-  add('GET', '/api/personalities', ({ query }) => {
-    const state = S();
-    let list = state.personalities || [];
+  add('GET', '/api/personalities', async ({ query }) => {
     const search = (query.search || '').trim();
-    if (search) {
-      list = list.filter((p) => (p.name || '').includes(search) || (p.description || '').includes(search));
-    }
-    const total = list.length;
     const offset = Math.max(0, parseInt(query.offset, 10) || 0);
-    const limit = query.limit === 'all' ? total : Math.max(1, parseInt(query.limit, 10) || 50);
-    const page = list.slice(offset, offset + limit);
-    return ok({ total, offset, limit, items: page });
+    const limit = query.limit === 'all' ? 'all' : Math.max(1, parseInt(query.limit, 10) || 50);
+    return ok(await repo.listPersonalities({ search, offset, limit }));
   });
 
-  add('POST', '/api/personalities', ({ body }) => {
-    const state = S();
-    const keys = elementKeysFrom(state);
+  add('POST', '/api/personalities', async ({ body }) => {
+    const keys = elementKeysFrom(await repo.getSettings());
     const p = sanitizePersonality(body, keys);
     if (!p.name) return err('שם סוג האישיות חסר');
-    state.personalities.push(p);
-    store.save();
+    await repo.addPersonality(p);
     return ok(p, 201);
   });
 
-  add('PUT', '/api/personalities/:id', ({ params, body }) => {
-    const state = S();
-    const keys = elementKeysFrom(state);
-    const idx = state.personalities.findIndex((p) => p.id === params.id);
-    if (idx < 0) return err('סוג אישיות לא נמצא', 404);
-    const updated = sanitizePersonality({ ...state.personalities[idx], ...body, id: params.id }, keys);
-    state.personalities[idx] = updated;
-    store.save();
+  add('PUT', '/api/personalities/:id', async ({ params, body }) => {
+    const existing = await repo.getPersonality(params.id);
+    if (!existing) return err('סוג אישיות לא נמצא', 404);
+    const keys = elementKeysFrom(await repo.getSettings());
+    const updated = sanitizePersonality({ ...existing, ...body, id: params.id }, keys);
+    await repo.updatePersonality(params.id, updated);
     return ok(updated);
   });
 
-  add('DELETE', '/api/personalities/:id', ({ params }) => {
-    const state = S();
-    const before = state.personalities.length;
-    state.personalities = state.personalities.filter((p) => p.id !== params.id);
-    if (state.personalities.length === before) return err('סוג אישיות לא נמצא', 404);
-    store.save();
+  add('DELETE', '/api/personalities/:id', async ({ params }) => {
+    const okDel = await repo.deletePersonality(params.id);
+    if (!okDel) return err('סוג אישיות לא נמצא', 404);
     return ok({ deleted: params.id });
   });
 
   // ייבוא מרובה
-  add('POST', '/api/personalities/bulk', ({ body }) => {
-    const state = S();
-    const keys = elementKeysFrom(state);
+  add('POST', '/api/personalities/bulk', async ({ body }) => {
+    const keys = elementKeysFrom(await repo.getSettings());
     const list = Array.isArray(body) ? body : body.personalities;
     if (!Array.isArray(list)) return err('נדרש מערך סוגי אישיות');
     const mode = (Array.isArray(body) ? 'append' : body.mode) || 'append';
-    const sanitized = list.map((p) => sanitizePersonality(p, keys));
-    if (mode === 'replace') state.personalities = sanitized;
-    else state.personalities.push(...sanitized);
-    store.save();
-    return ok({ imported: sanitized.length, total: state.personalities.length }, 201);
+    const clean = list.map((p) => sanitizePersonality(p, keys));
+    if (mode === 'replace') await repo.setPersonalities(clean);
+    else await repo.appendPersonalities(clean);
+    return ok({ imported: clean.length, total: await repo.countPersonalities() }, 201);
   });
 
   // חידוש המאגר האלגוריתמי
-  add('POST', '/api/personalities/generate', ({ body }) => {
-    const state = S();
+  add('POST', '/api/personalities/generate', async ({ body }) => {
     const step = Math.max(5, Math.min(50, parseInt(body?.step, 10) || 10));
     const generated = generatePersonalities(step);
-    if (body?.mode === 'append') state.personalities.push(...generated);
-    else state.personalities = generated;
-    store.save();
-    return ok({ generated: generated.length, step, total: state.personalities.length }, 201);
+    if (body?.mode === 'append') await repo.appendPersonalities(generated);
+    else await repo.setPersonalities(generated);
+    return ok({ generated: generated.length, step, total: await repo.countPersonalities() }, 201);
   });
 
   // מחיקת כל סוגי האישיות
-  add('DELETE', '/api/personalities', () => {
-    const state = S();
-    state.personalities = [];
-    store.save();
+  add('DELETE', '/api/personalities', async () => {
+    await repo.clearPersonalities();
     return ok({ cleared: true });
   });
 
   // ---- שקלול (ללא שמירה) ----
-  add('POST', '/api/score', ({ body }) => {
-    const state = S();
-    const opts = matchOptions(state);
-    const questions = (state.questions || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+  add('POST', '/api/score', async ({ body }) => {
+    const [settings, questions, personalities] = await Promise.all([
+      repo.getSettings(), repo.listQuestions(), repo.allPersonalities(),
+    ]);
+    const opts = matchOptions(settings);
 
-    // תמיכה גם במשתתף בודד וגם בקבוצה
     let participants;
     if (Array.isArray(body)) participants = body;
     else if (Array.isArray(body.participants)) participants = body.participants;
     else if (body.answers) participants = [body];
     else return err('נדרש { participants: [...] } או { answers: {...} }');
 
-    const result = scoreBatch(participants, questions, state.personalities, opts);
-    return ok(result);
+    return ok(scoreBatch(participants, questions, personalities, opts));
   });
 
-  // ---- קבוצות (שמירת מפגש שקלול) ----
-  add('GET', '/api/batches', () => {
-    const list = (S().batches || []).map((b) => ({
-      id: b.id,
-      name: b.name,
-      createdAt: b.createdAt,
-      count: b.result?.count || 0,
-    }));
-    return ok(list);
-  });
+  // ---- מפגשים ----
+  add('GET', '/api/batches', async () => ok(await repo.listBatches()));
 
-  add('GET', '/api/batches/:id', ({ params }) => {
-    const b = (S().batches || []).find((x) => x.id === params.id);
+  add('GET', '/api/batches/:id', async ({ params }) => {
+    const b = await repo.getBatch(params.id);
     if (!b) return err('קבוצה לא נמצאה', 404);
     return ok(b);
   });
 
-  add('POST', '/api/batches', ({ body }) => {
-    const state = S();
-    const opts = matchOptions(state);
-    const questions = (state.questions || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+  add('POST', '/api/batches', async ({ body }) => {
+    const [settings, questions, personalities] = await Promise.all([
+      repo.getSettings(), repo.listQuestions(), repo.allPersonalities(),
+    ]);
     const participants = Array.isArray(body.participants) ? body.participants : (Array.isArray(body) ? body : null);
     if (!participants) return err('נדרש { participants: [...] }');
-    const result = scoreBatch(participants, questions, state.personalities, opts);
+    const result = scoreBatch(participants, questions, personalities, matchOptions(settings));
     const batch = {
       id: newId('batch'),
       name: String(body.name || `מפגש ${new Date().toISOString().slice(0, 10)}`),
@@ -291,25 +245,22 @@ export function createRouter(store) {
       participants,
       result,
     };
-    state.batches.push(batch);
-    store.save();
+    await repo.addBatch(batch);
     return ok(batch, 201);
   });
 
-  add('DELETE', '/api/batches/:id', ({ params }) => {
-    const state = S();
-    const before = state.batches.length;
-    state.batches = state.batches.filter((b) => b.id !== params.id);
-    if (state.batches.length === before) return err('קבוצה לא נמצאה', 404);
-    store.save();
+  add('DELETE', '/api/batches/:id', async ({ params }) => {
+    const okDel = await repo.deleteBatch(params.id);
+    if (!okDel) return err('קבוצה לא נמצאה', 404);
     return ok({ deleted: params.id });
   });
 
   // ---- סטטיסטיקה ללוח הבקרה ----
-  add('GET', '/api/stats', () => {
-    const state = S();
-    const keys = elementKeysFrom(state);
-    const batches = state.batches || [];
+  add('GET', '/api/stats', async () => {
+    const [settings, questions, personalityCount, batches] = await Promise.all([
+      repo.getSettings(), repo.listQuestions(), repo.countPersonalities(), repo.allBatches(),
+    ]);
+    const keys = elementKeysFrom(settings);
     let participantCount = 0;
     const elementSum = Object.fromEntries(keys.map((k) => [k, 0]));
     const personalityTally = {}; // לפי מזהה (שמות עשויים לחזור בין סוגים שונים)
@@ -333,8 +284,8 @@ export function createRouter(store) {
       .map(({ name, count }) => ({ name, count }));
 
     return ok({
-      questions: (state.questions || []).length,
-      personalities: (state.personalities || []).length,
+      questions: questions.length,
+      personalities: personalityCount,
       batches: batches.length,
       participants: participantCount,
       elementAverages,
@@ -342,30 +293,22 @@ export function createRouter(store) {
     });
   });
 
-  // ---- כלים: איפוס / ייצוא / ייבוא מאגר שלם ----
-  add('POST', '/api/reset', ({ body }) => {
+  // ---- כלים: איפוס / ייצוא / ייבוא ----
+  add('POST', '/api/reset', async ({ body }) => {
     const what = body?.what || 'all';
-    const state = S();
-    if (what === 'all') {
-      store.replace(buildSeedData());
-    } else if (what === 'questions') {
-      state.questions = buildSampleQuestions();
-      store.save();
-    } else if (what === 'settings') {
-      state.settings = defaultSettings();
-      store.save();
-    } else if (what === 'batches') {
-      state.batches = [];
-      store.save();
-    }
+    if (what === 'all') await repo.replaceAll(buildSeedData());
+    else if (what === 'questions') await repo.setQuestions(buildSampleQuestions());
+    else if (what === 'settings') await repo.saveSettings(defaultSettings());
+    else if (what === 'batches') await repo.clearBatches();
+    else return err('ערך what לא מוכר');
     return ok({ reset: what });
   });
 
-  add('GET', '/api/export', () => ok(S()));
+  add('GET', '/api/export', async () => ok(await repo.exportAll()));
 
-  add('POST', '/api/import', ({ body }) => {
+  add('POST', '/api/import', async ({ body }) => {
     if (!body || typeof body !== 'object' || !body.settings) return err('מבנה מאגר לא תקין');
-    // נרמול: מבטיח שכל הקולקציות הן מערכים, אחרת נקודות הכתיבה יקרסו והמאגר יושחת
+    // נרמול: מבטיח שכל הקולקציות הן מערכים והגדרות תקינות
     const base = defaultSettings();
     const settings = {
       ...base,
@@ -380,7 +323,7 @@ export function createRouter(store) {
       personalities: Array.isArray(body.personalities) ? body.personalities : [],
       batches: Array.isArray(body.batches) ? body.batches : [],
     };
-    store.replace(normalized);
+    await repo.replaceAll(normalized);
     return ok({ imported: true });
   });
 

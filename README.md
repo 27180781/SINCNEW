@@ -10,17 +10,32 @@
 
 ## הפעלה
 
-אין תלויות חיצוניות ואין צורך ב-`npm install`. נדרש Node.js 20 ומעלה.
+נדרש Node.js 20 ומעלה.
 
 ```bash
-node server.js
+node server.js          # מצב JSON — ללא npm install כלל
 # או:  npm start
 ```
 
 * מבחן:   http://localhost:3000/
 * ניהול:  http://localhost:3000/admin
 
-הנתונים נשמרים בקובץ `data/db.json` (נוצר אוטומטית עם נתוני זרעה בהרצה הראשונה).
+### שכבת אחסון גמישה
+המערכת בוחרת אחסון לפי משתנה הסביבה `DATABASE_URL`:
+
+| מצב | תנאי | אחסון |
+|-----|------|-------|
+| **פיתוח** | אין `DATABASE_URL` | קובץ `data/db.json` (ללא תלויות, ללא התקנה) |
+| **פרודקשן** | `DATABASE_URL` מוגדר | PostgreSQL (סכימה + זריעה נוצרות אוטומטית בהפעלה ראשונה) |
+
+```bash
+# הרצה מול Postgres מקומי:
+npm install                                   # נדרש רק במצב Postgres (בשביל החבילה pg)
+DATABASE_URL=postgres://user:pass@localhost:5432/elements node server.js
+```
+
+שכבת האחסון מופשטת ב-`src/repo/` — שני מימושים (`JsonRepo` / `PgRepo`) עם ממשק זהה,
+מכוסים בבדיקת פאריטי משותפת (`test/repo.test.js`).
 
 ### הגנת הפאנל (אופציונלי)
 כברירת מחדל ה-API פתוח (נוח לפיתוח מקומי). כדי להגן על נתיבי הניהול, הריצו עם טוקן:
@@ -39,26 +54,32 @@ npm run reset # איפוס הנתונים לברירת מחדל
 
 ---
 
-## פריסה ל-CapRover
+## פריסה ל-CapRover (שתי אפליקציות: DB + Web)
 
-הפרויקט כולל `captain-definition` ו-`Dockerfile` מוכנים (אפליקציית Node ללא תלויות).
+### שלב 1 — אפליקציית ה-PostgreSQL
+1. ב-CapRover: **Apps → One-Click Apps/Databases → PostgreSQL**.
+2. שם אפליקציה: למשל `elements-db`; גרסה `16`; הגדירו סיסמה חזקה.
+   (התבנית כוללת נפח פרסיסטנטי אוטומטי — הנתונים נשמרים.)
+3. הכתובת הפנימית של ה-DB בתוך CapRover: `srv-captain--elements-db` (פורט 5432).
 
-1. ב-CapRover: **Apps → Create New App** (למשל `elements`).
-2. **Deployment** — בחרו שיטה:
-   * מ-GitHub: הדביקו את כתובת הריפו + הענף `claude/personality-elements-system-ww1x3s`.
-   * או מהמחשב: `npm i -g caprover` ואז `caprover deploy` מתיקיית הפרויקט.
-3. **App Configs → Environmental Variables** — הגדירו טוקן ניהול (חשוב! הפאנל יהיה חשוף אחרת):
+### שלב 2 — אפליקציית ה-Web
+1. **Apps → Create New App** (למשל `elements`).
+2. **Deployment**:
+   * מ-GitHub: כתובת הריפו + הענף `claude/personality-elements-system-ww1x3s`.
+   * או מהמחשב: `npm i -g caprover` ואז `caprover deploy`.
+3. **Environmental Variables**:
    ```
+   DATABASE_URL=postgres://postgres:הסיסמה@srv-captain--elements-db:5432/postgres
    ADMIN_TOKEN=בחרו-סוד-חזק
    ```
-4. **Persistent Directories** (כדי שהנתונים ישרדו פריסות מחדש) — הוסיפו נתיב:
-   * Path in App: `/app/data`
-5. **HTTPS** — הפעילו Enable HTTPS + Force HTTPS בטאב HTTP Settings.
+   * `DATABASE_URL` — מחבר את ה-Web ל-DB (הסכימה והזריעה נוצרות אוטומטית בהפעלה ראשונה).
+   * `ADMIN_TOKEN` — **חשוב!** בלעדיו פאנל הניהול חשוף לכל.
+4. **HTTP Settings** — הפעילו Enable HTTPS + Force HTTPS.
 
 הקונטיינר מאזין על פורט 80 (ברירת המחדל של CapRover) — אין צורך בהגדרת פורט ידנית.
 
-> הערה: האחסון הוא קובץ JSON. ה-Persistent Directory הכרחי — בלעדיו הנתונים
-> (שאלות, סוגי אישיות, מפגשים) יימחקו בכל פריסה/הפעלה מחדש.
+> במצב Postgres אין צורך בנפח פרסיסטנטי על אפליקציית ה-Web — כל הנתונים ב-DB.
+> (אם תריצו בלי `DATABASE_URL`, האחסון הוא `data/db.json` וצריך נפח פרסיסטנטי ל-`/app/data`.)
 
 ---
 
@@ -140,22 +161,31 @@ npm run reset # איפוס הנתונים לברירת מחדל
 ## מבנה הפרויקט
 
 ```
-server.js              שרת HTTP (Node טהור) + ניתוב + הגשת קבצים
+server.js              שרת HTTP (Node) + ניתוב + הגשת קבצים + שער ADMIN_TOKEN
 src/
   scoring.js           מנוע השקלול וההתאמה (טהור, נבדק ביחידות)
   seed.js              יסודות, הגדרות, שאלות לדוגמה, מחולל סוגי האישיות
-  store.js             שכבת אחסון (קובץ JSON, כתיבה אטומית)
-  api.js               הגדרת ה-endpoints
+  api.js               הגדרת ה-endpoints (מול repo, אסינכרוני)
+  store.js             מנוע אחסון קובץ JSON (כתיבה אטומית)
+  repo/
+    index.js           factory — בוחר מימוש לפי DATABASE_URL
+    json-repo.js       מימוש מעל קובץ JSON
+    pg-repo.js         מימוש מעל PostgreSQL (סכימה + JSONB)
 public/
   index.html           המבחן הציבורי
   admin.html           פאנל הניהול
   css/app.css          עיצוב (RTL)
   js/                  api.js · quiz.js · admin.js
-test/scoring.test.js   בדיקות יחידה
+test/
+  scoring.test.js      בדיקות מנוע השקלול
+  repo.test.js         בדיקת פאריטי: JsonRepo ו-PgRepo (דרך pg-mem)
+Dockerfile             דימוי לפריסה (CapRover)
+captain-definition     הגדרת CapRover
 ```
 
 ## המשך פיתוח (רעיונות)
 - הרחבת ההגנה מטוקן בודד (`ADMIN_TOKEN`) לכניסת משתמשים מלאה (סשנים/תפקידים)
-- העברת האחסון ל-DB אמיתי (הממשק ב-`store.js` מוכן להחלפה)
+- ✅ אחסון PostgreSQL (בוצע — `src/repo/pg-repo.js`)
 - ניתוח קבוצתי מעמיק וגרפים
 - שאלות עם משקלים שונים ליסודות
+- אינדקס trigram (`pg_trgm`) לחיפוש מהיר במאות אלפי סוגי אישיות

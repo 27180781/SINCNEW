@@ -9,8 +9,7 @@ import { join, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 
-import { Store } from './src/store.js';
-import { buildSeedData } from './src/seed.js';
+import { createRepo } from './src/repo/index.js';
 import { createRouter } from './src/api.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -22,10 +21,9 @@ const DATA_FILE = process.env.DATA_FILE || join(__dirname, 'data', 'db.json');
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const PUBLIC_API = new Set(['GET /api/health', 'GET /api/config', 'POST /api/score']);
 
-// --- אתחול המאגר ---
-const store = new Store(DATA_FILE);
-store.init(buildSeedData());
-const routes = createRouter(store);
+// --- אתחול שכבת האחסון (Postgres אם הוגדר DATABASE_URL, אחרת קובץ JSON) ---
+const { repo, kind: storageKind } = await createRepo({ dataFile: DATA_FILE });
+const routes = createRouter(repo);
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -148,7 +146,7 @@ const server = http.createServer(async (req, res) => {
       }
     }
     try {
-      const result = await route.handler({ req, res, params: route.params, query, body, store });
+      const result = await route.handler({ req, res, params: route.params, query, body });
       return sendJson(res, result.status || 200, result.body);
     } catch (e) {
       console.error('שגיאת שרת:', e);
@@ -167,7 +165,7 @@ server.listen(PORT, () => {
   console.log(`\n  🌿 מערכת ארבעת היסודות פועלת`);
   console.log(`     מבחן:      http://localhost:${PORT}/`);
   console.log(`     ניהול:     http://localhost:${PORT}/admin`);
-  console.log(`     נתונים:    ${DATA_FILE}`);
+  console.log(`     אחסון:     ${storageKind === 'postgres' ? 'PostgreSQL' : `קובץ JSON (${DATA_FILE})`}`);
   if (ADMIN_TOKEN) console.log('     🔒 ה-API מוגן ב-ADMIN_TOKEN\n');
   else console.log('     ⚠  ADMIN_TOKEN לא הוגדר — ה-API פתוח (מתאים לפיתוח מקומי בלבד)\n');
 });
