@@ -19,7 +19,14 @@ const DATA_FILE = process.env.DATA_FILE || join(__dirname, 'data', 'db.json');
 
 // שער הרשאה אופציונלי: אם מוגדר ADMIN_TOKEN, כל נתיב שאינו ציבורי דורש כותרת תואמת.
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
-const PUBLIC_API = new Set(['GET /api/health', 'GET /api/config', 'POST /api/score']);
+const PUBLIC_API = new Set([
+  'GET /api/health',
+  'GET /api/config',
+  'POST /api/score',
+  'GET /api/games/webhook', // webhook המשחק — מוגן בטוקן משלו (GAME_TOKEN), לא ב-ADMIN_TOKEN
+  'POST /api/games/webhook',
+]);
+const WEBHOOK_PATH = '/api/games/webhook';
 
 // --- אתחול שכבת האחסון (Postgres אם הוגדר DATABASE_URL, אחרת קובץ JSON) ---
 const { repo, kind: storageKind } = await createRepo({ dataFile: DATA_FILE });
@@ -128,6 +135,19 @@ const server = http.createServer(async (req, res) => {
 
   // API
   if (pathname.startsWith('/api/')) {
+    // CORS ל-webhook המשחק — הבקשה מגיעה מדפדפן המנחה (cross-origin).
+    // חובה לענות ל-OPTIONS (preflight) אחרת ה-POST האמיתי לא יישלח.
+    if (pathname === WEBHOOK_PATH) {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Access-Control-Max-Age', '86400');
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+    }
     // שער הרשאה אופציונלי לנתיבי ניהול
     if (ADMIN_TOKEN && !PUBLIC_API.has(`${req.method} ${pathname}`)) {
       const token = req.headers['x-admin-token'] || url.searchParams.get('token') || '';

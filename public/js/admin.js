@@ -71,14 +71,17 @@ async function loadQuestions() {
   state.questions.forEach((q, i) => {
     const card = el('div', { class: 'card', style: 'padding:14px' });
     const head = el('div', { class: 'row' }, [
-      el('strong', {}, `${i + 1}. ${q.text}`), el('div', { class: 'spacer' }),
+      el('strong', {}, `${i + 1}. ${q.text}`),
+      q.queId != null ? el('span', { class: 'badge', title: 'queId במערכת המשחק' }, `queId ${q.queId}`) : null,
+      el('div', { class: 'spacer' }),
       el('button', { class: 'small', onclick: () => editQuestion(q) }, 'עריכה'),
       el('button', { class: 'small danger', onclick: () => delQuestion(q) }, 'מחיקה'),
     ]);
     card.appendChild(head);
     const opts = el('div', { class: 'row', style: 'margin-top:8px' });
     (q.options || []).forEach((o) => {
-      opts.appendChild(el('span', { class: `el-chip el-${o.element}` }, `${elEmoji(o.element)} ${o.text}`));
+      const prefix = o.answerId != null ? `[${o.answerId}] ` : '';
+      opts.appendChild(el('span', { class: `el-chip el-${o.element}` }, `${prefix}${elEmoji(o.element)} ${o.text}`));
     });
     card.appendChild(opts);
     list.appendChild(card);
@@ -102,16 +105,21 @@ function editQuestion(q) {
   form.appendChild(el('h2', {}, isNew ? 'שאלה חדשה' : 'עריכת שאלה'));
   const textField = el('div', { class: 'field' }, [el('label', {}, 'טקסט השאלה'), el('input', { id: 'q_text', value: data.text })]);
   form.appendChild(textField);
-  form.appendChild(el('label', {}, 'אפשרויות (טקסט + יסוד)'));
+  const queIdInput = el('input', { id: 'q_queId', type: 'number', value: data.queId ?? '', placeholder: 'ריק = לפי מיקום' });
+  form.appendChild(el('div', { class: 'field' }, [
+    el('label', {}, 'queId — מזהה השאלה במערכת המשחק (לאינטגרציה)'), queIdInput,
+  ]));
+  form.appendChild(el('label', {}, 'אפשרויות: answerId · טקסט · יסוד'));
   const optRows = [];
   const opts = (data.options && data.options.length ? data.options : ELEMENT_ORDER.map((k) => ({ text: '', element: k }))).slice(0, 4);
   while (opts.length < 4) opts.push({ text: '', element: ELEMENT_ORDER[opts.length] });
-  opts.forEach((o) => {
+  opts.forEach((o, i) => {
+    const ansInput = el('input', { type: 'number', value: o.answerId ?? '', placeholder: `${i + 1}`, title: 'answerId (מזהה התשובה במשחק). ריק = לפי מיקום' });
     const input = el('input', { value: o.text, placeholder: 'טקסט התשובה' });
     const sel = elementSelect(o.element);
-    optRows.push({ input, sel, id: o.id });
+    optRows.push({ input, sel, ansInput, id: o.id });
     form.appendChild(el('div', { class: 'row', style: 'margin-bottom:8px' }, [
-      el('div', { style: 'flex:1' }, input), el('div', { style: 'width:130px' }, sel),
+      el('div', { style: 'width:70px' }, ansInput), el('div', { style: 'flex:1' }, input), el('div', { style: 'width:130px' }, sel),
     ]));
   });
   const actions = el('div', { class: 'row', style: 'margin-top:12px' }, [
@@ -122,9 +130,17 @@ function editQuestion(q) {
   openModal(form);
 
   async function save() {
+    const queIdVal = document.getElementById('q_queId').value.trim();
     const payload = {
       text: document.getElementById('q_text').value.trim(),
-      options: optRows.map((r) => ({ id: r.id, text: r.input.value.trim(), element: r.sel.value, weight: 1 })),
+      queId: queIdVal === '' ? null : Number(queIdVal),
+      options: optRows.map((r) => ({
+        id: r.id,
+        text: r.input.value.trim(),
+        element: r.sel.value,
+        answerId: r.ansInput.value.trim() === '' ? null : Number(r.ansInput.value),
+        weight: 1,
+      })),
     };
     if (!payload.text) return toast('טקסט השאלה חסר', true);
     try {
@@ -291,6 +307,21 @@ document.getElementById('bulkPersBtn').addEventListener('click', () => {
 // ============================================================
 //  שיוך משתתפים / ייבוא
 // ============================================================
+async function loadIntegration() {
+  try {
+    const info = await api.get('/api/integration');
+    document.getElementById('webhookUrl').value = window.location.origin + info.webhookPath;
+    document.getElementById('integrationToken').textContent = info.tokenRequired ? '🔒 נדרש token ב-URL' : 'ללא טוקן';
+  } catch { /* אין קריטי */ }
+}
+document.getElementById('copyWebhookBtn').addEventListener('click', () => {
+  const inp = document.getElementById('webhookUrl');
+  inp.select();
+  const done = () => toast('הכתובת הועתקה');
+  if (navigator.clipboard) navigator.clipboard.writeText(inp.value).then(done).catch(() => document.execCommand('copy') && done());
+  else { document.execCommand('copy'); done(); }
+});
+
 function exampleParticipants() {
   const qs = state.questions.length ? state.questions : [];
   const letters = ['A', 'B', 'C', 'D'];
@@ -376,17 +407,24 @@ function renderScoreResults(result) {
 
   const wrap = document.getElementById('scoreTable');
   wrap.innerHTML = '';
+  const hasGame = result.results.some((r) => r.game);
   const t = el('table');
-  t.innerHTML = `<thead><tr><th>משתתף</th>${ELEMENT_ORDER.map((k) => `<th>${escapeHtml(elEmoji(k))}</th>`).join('')}<th>דומיננטי</th><th>סוג אישיות</th><th>התאמה</th></tr></thead>`;
+  const gameHead = hasGame ? '<th>🎮 ניקוד</th><th>✓ נכונות</th>' : '';
+  t.innerHTML = `<thead><tr><th>משתתף</th>${ELEMENT_ORDER.map((k) => `<th>${escapeHtml(elEmoji(k))}</th>`).join('')}<th>דומיננטי</th><th>סוג אישיות</th><th>התאמה</th>${gameHead}</tr></thead>`;
   const tb = el('tbody');
   result.results.forEach((r) => {
-    tb.appendChild(el('tr', {}, [
+    const cells = [
       el('td', {}, el('strong', {}, r.name || r.id)),
       ...ELEMENT_ORDER.map((k) => el('td', {}, `${r.percentages[k]}%`)),
       el('td', {}, r.dominant ? el('span', { class: `el-chip el-${r.dominant}` }, elLabel(r.dominant)) : '—'),
       el('td', {}, r.match ? r.match.name : '—'),
       el('td', {}, r.match ? `${r.match.similarity}%` : '—'),
-    ]));
+    ];
+    if (hasGame) {
+      cells.push(el('td', {}, r.game ? String(r.game.score ?? '—') : '—'));
+      cells.push(el('td', {}, r.game ? `${r.game.numCorrect ?? 0}/${r.game.numAnswers ?? 0}` : '—'));
+    }
+    tb.appendChild(el('tr', {}, cells));
   });
   t.appendChild(tb); wrap.appendChild(t);
 }
@@ -398,7 +436,11 @@ async function loadBatches() {
   if (!batches.length) { box.appendChild(el('div', { class: 'empty' }, 'אין מפגשים שמורים')); return; }
   batches.slice().reverse().forEach((b) => {
     box.appendChild(el('div', { class: 'row', style: 'border-bottom:1px solid var(--line);padding:6px 0' }, [
-      el('div', {}, [el('strong', {}, b.name), el('div', {}, el('small', {}, `${b.count} משתתפים · ${new Date(b.createdAt).toLocaleDateString('he-IL')}`))]),
+      el('div', {}, [
+        b.source === 'game' ? el('span', { class: 'badge', title: 'התקבל ממערכת המשחק' }, '🎮 משחק') : null,
+        el('strong', { style: 'margin-inline-start:6px' }, b.name),
+        el('div', {}, el('small', {}, `${b.count} משתתפים · ${new Date(b.createdAt).toLocaleDateString('he-IL')}`)),
+      ]),
       el('div', { class: 'spacer' }),
       el('button', { class: 'small', onclick: () => viewBatch(b.id) }, 'הצגה'),
       el('button', { class: 'small danger', onclick: async () => { if (confirm('למחוק?')) { await api.del(`/api/batches/${b.id}`); loadBatches(); } } }, '✕'),
@@ -479,7 +521,7 @@ const loaders = {
   dashboard: loadDashboard,
   questions: loadQuestions,
   personalities: () => loadPersonalities(),
-  participants: () => { renderFormatHelp(); loadBatches(); if (!state.questions.length) api.get('/api/questions').then((q) => { state.questions = q; }); },
+  participants: () => { renderFormatHelp(); loadIntegration(); loadBatches(); if (!state.questions.length) api.get('/api/questions').then((q) => { state.questions = q; }); },
   settings: loadSettings,
 };
 

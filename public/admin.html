@@ -70,6 +70,18 @@
 
     <!-- שיוך משתתפים -->
     <section class="tab-panel" id="tab-participants">
+      <div class="card" id="integrationCard">
+        <div class="row">
+          <h2 style="margin:0">🎮 אינטגרציית משחק (webhook)</h2>
+          <span class="badge" id="integrationToken"></span>
+        </div>
+        <p><small>הגדירו את הכתובת הבאה בעורך המשחק (שיטת POST מומלצת). המערכת תקבל את התוצאות, תשקלל פרופיל יסודות ותצמיד סוג אישיות לכל משתתף.</small></p>
+        <div class="row">
+          <input id="webhookUrl" readonly style="font-family:monospace;font-size:.8rem" />
+          <button id="copyWebhookBtn">העתקה</button>
+        </div>
+        <p><small>מיפוי: לכל שאלה הגדירו <code>queId</code> ולכל אפשרות <code>answerId</code> (בטאב "שאלות") כדי שיתאימו למזהי המשחק. אם לא הוגדרו — המיפוי לפי מיקום.</small></p>
+      </div>
       <div class="grid cols-2">
         <div class="card">
           <h2>קלט JSON של משתתפים</h2>

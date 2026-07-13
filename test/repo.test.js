@@ -101,6 +101,22 @@ async function checkRepo(repo) {
   assert.equal(await repo.deleteBatch('btest'), true);
   assert.equal((await repo.listBatches()).length, 0);
 
+  // מפגש משחק + מניעת כפילויות (findGameBatch)
+  const gameBatch = {
+    id: 'gb1', name: 'משחק', createdAt: new Date().toISOString(),
+    source: 'game', gameId: 'G1', sentAt: '2026-01-01T00:00:00Z',
+    game: { gameId: 'G1', gameName: 'משחק' }, participants: [], result: { count: 0, results: [] },
+  };
+  await repo.addBatch(gameBatch);
+  const found = await repo.findGameBatch('G1', '2026-01-01T00:00:00Z');
+  assert.ok(found, 'findGameBatch מוצא לפי gameId+sentAt');
+  assert.equal(found.source, 'game');
+  assert.equal(found.game.gameName, 'משחק');
+  assert.equal(await repo.findGameBatch('G1', 'תאריך-אחר'), null);
+  const summary = await repo.listBatches();
+  assert.equal(summary[0].source, 'game', 'listBatches כולל source');
+  await repo.deleteBatch('gb1');
+
   // הגדרות — שמירה
   const s2 = { ...settings, title: 'כותרת חדשה' };
   await repo.saveSettings(s2);

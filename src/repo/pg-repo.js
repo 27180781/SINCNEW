@@ -30,8 +30,17 @@ CREATE TABLE IF NOT EXISTS batches (
   name         TEXT,
   created_at   TIMESTAMPTZ DEFAULT now(),
   participants JSONB,
-  result       JSONB
+  result       JSONB,
+  source       TEXT,
+  game_id      TEXT,
+  sent_at      TEXT,
+  game         JSONB
 );
+ALTER TABLE batches ADD COLUMN IF NOT EXISTS source  TEXT;
+ALTER TABLE batches ADD COLUMN IF NOT EXISTS game_id TEXT;
+ALTER TABLE batches ADD COLUMN IF NOT EXISTS sent_at TEXT;
+ALTER TABLE batches ADD COLUMN IF NOT EXISTS game    JSONB;
+CREATE INDEX IF NOT EXISTS batches_game_key ON batches (game_id, sent_at);
 `;
 
 const J = (obj) => JSON.stringify(obj ?? null);
@@ -44,7 +53,12 @@ function rowToPersonality(r) {
 }
 function rowToBatch(r) {
   const createdAt = r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at;
-  return { id: r.id, name: r.name, createdAt, participants: r.participants || [], result: r.result || null };
+  const batch = { id: r.id, name: r.name, createdAt, participants: r.participants || [], result: r.result || null };
+  if (r.source != null) batch.source = r.source;
+  if (r.game_id != null) batch.gameId = r.game_id;
+  if (r.sent_at != null) batch.sentAt = r.sent_at;
+  if (r.game != null) batch.game = r.game;
+  return batch;
 }
 
 export class PgRepo {
@@ -211,28 +225,42 @@ export class PgRepo {
   // ---- מפגשים ----
   async listBatches() {
     const { rows } = await this.q(
-      `SELECT id, name, created_at, COALESCE(jsonb_array_length(result->'results'), 0) AS count
+      `SELECT id, name, created_at, source, COALESCE(jsonb_array_length(result->'results'), 0) AS count
        FROM batches ORDER BY created_at ASC`
     );
     return rows.map((r) => ({
       id: r.id,
       name: r.name,
       createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
+      source: r.source || null,
       count: Number(r.count) || 0,
     }));
   }
   async allBatches() {
-    const { rows } = await this.q('SELECT id, name, created_at, participants, result FROM batches ORDER BY created_at ASC');
+    const { rows } = await this.q(
+      'SELECT id, name, created_at, participants, result, source, game_id, sent_at, game FROM batches ORDER BY created_at ASC'
+    );
     return rows.map(rowToBatch);
   }
   async getBatch(id) {
-    const { rows } = await this.q('SELECT id, name, created_at, participants, result FROM batches WHERE id = $1', [id]);
+    const { rows } = await this.q(
+      'SELECT id, name, created_at, participants, result, source, game_id, sent_at, game FROM batches WHERE id = $1',
+      [id]
+    );
+    return rows[0] ? rowToBatch(rows[0]) : null;
+  }
+  async findGameBatch(gameId, sentAt) {
+    const { rows } = await this.q(
+      'SELECT id, name, created_at, participants, result, source, game_id, sent_at, game FROM batches WHERE game_id = $1 AND sent_at = $2 LIMIT 1',
+      [gameId, sentAt]
+    );
     return rows[0] ? rowToBatch(rows[0]) : null;
   }
   async addBatch(b) {
     await this.q(
-      'INSERT INTO batches (id, name, created_at, participants, result) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb)',
-      [b.id, b.name, b.createdAt, J(b.participants), J(b.result)]
+      `INSERT INTO batches (id, name, created_at, participants, result, source, game_id, sent_at, game)
+       VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, $9::jsonb)`,
+      [b.id, b.name, b.createdAt, J(b.participants), J(b.result), b.source || null, b.gameId || null, b.sentAt || null, b.game ? J(b.game) : null]
     );
     return b;
   }
@@ -270,8 +298,10 @@ export class PgRepo {
       await this._insertPersonalities(client, data.personalities || []);
       for (const b of data.batches || []) {
         await client.query(
-          'INSERT INTO batches (id, name, created_at, participants, result) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb)',
-          [b.id, b.name, b.createdAt || new Date().toISOString(), J(b.participants), J(b.result)]
+          `INSERT INTO batches (id, name, created_at, participants, result, source, game_id, sent_at, game)
+           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, $9::jsonb)`,
+          [b.id, b.name, b.createdAt || new Date().toISOString(), J(b.participants), J(b.result),
+           b.source || null, b.gameId || null, b.sentAt || null, b.game ? J(b.game) : null]
         );
       }
       await client.query('COMMIT');

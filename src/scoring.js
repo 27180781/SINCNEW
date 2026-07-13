@@ -31,14 +31,16 @@ function buildOptionResolver(question) {
   const byIndex1 = new Map();
   const byIndex0 = new Map();
   const byElement = new Map();
+  const byAnswerId = new Map();
   options.forEach((opt, i) => {
     if (opt.id != null) byId.set(String(opt.id), opt);
+    if (opt.answerId != null) byAnswerId.set(String(opt.answerId), opt);
     byLetter.set(LETTERS[i] || `#${i}`, opt);
     byIndex1.set(String(i + 1), opt);
     byIndex0.set(String(i), opt);
     if (opt.element) byElement.set(String(opt.element), opt);
   });
-  return { options, byId, byLetter, byIndex1, byIndex0, byElement };
+  return { options, byId, byLetter, byIndex1, byIndex0, byElement, byAnswerId };
 }
 
 export function resolveAnswerToOption(question, answerValue) {
@@ -55,9 +57,11 @@ export function resolveAnswerToOption(question, answerValue) {
   // 3) מפתח יסוד ישיר (fire/water/air/earth)
   if (r.byElement.has(raw)) return r.byElement.get(raw);
   if (r.byElement.has(raw.toLowerCase())) return r.byElement.get(raw.toLowerCase());
-  // 4) אינדקס מספרי (קודם 1-מבוסס, אחר כך 0-מבוסס). נרמול אפסים מובילים ('01' -> '1').
+  // 4) מזהה תשובה מפורש של המשחק (option.answerId), ואז אינדקס מספרי
+  //    (1-מבוסס ואז 0-מבוסס). נרמול אפסים מובילים ('01' -> '1').
   if (/^-?\d+$/.test(raw)) {
     const n = String(parseInt(raw, 10));
+    if (r.byAnswerId.has(n)) return r.byAnswerId.get(n);
     if (r.byIndex1.has(n)) return r.byIndex1.get(n);
     if (r.byIndex0.has(n)) return r.byIndex0.get(n);
   }

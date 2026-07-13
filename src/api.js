@@ -5,6 +5,7 @@
 
 import { scoreBatch, DEFAULT_ELEMENT_KEYS } from './scoring.js';
 import { buildSeedData, generatePersonalities, defaultSettings, buildSampleQuestions, newId } from './seed.js';
+import { validateGamePayload, gamePayloadToParticipants } from './game.js';
 
 const ok = (body, status = 200) => ({ status, body });
 const err = (message, status = 400) => ({ status, body: { error: message } });
@@ -23,10 +24,17 @@ function matchOptions(settings) {
 }
 
 // ולידציה בסיסית של שאלה
+const toNumOrNull = (v) => {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
 function sanitizeQuestion(input, fallbackOrder) {
   const q = {
     id: input.id || newId('q'),
     order: Number.isFinite(input.order) ? input.order : fallbackOrder,
+    queId: toNumOrNull(input.queId), // מזהה השאלה במערכת המשחק (לאינטגרציה)
     text: String(input.text || '').trim(),
     options: [],
   };
@@ -37,6 +45,7 @@ function sanitizeQuestion(input, fallbackOrder) {
     if (weight < 0) weight = 0; // משקל שלילי אינו חוקי
     return {
       id: o.id || `${q.id}o${i + 1}`,
+      answerId: toNumOrNull(o.answerId), // מזהה התשובה במערכת המשחק (לאינטגרציה)
       text: String(o.text || '').trim(),
       element: String(o.element || '').trim(),
       weight, // משקל 0 נשמר כפי שהוא (בעבר הומר בטעות ל-1)
@@ -254,6 +263,78 @@ export function createRouter(repo) {
     if (!okDel) return err('קבוצה לא נמצאה', 404);
     return ok({ deleted: params.id });
   });
+
+  // ---- אינטגרציית משחק: קבלת תוצאות (webhook) ----
+  // טוקן אופציונלי דרך ?token= (המערכת ציבורית מהדפדפן, ראו מסמך האינטגרציה)
+  const checkGameToken = (query) => {
+    const token = process.env.GAME_TOKEN || '';
+    return !token || query.token === token;
+  };
+
+  async function handleGameSubmission(raw) {
+    const v = validateGamePayload(raw);
+    if (!v.ok) return err(v.error, 400);
+    const game = v.payload;
+
+    // מניעת כפילויות לפי gameId + sentAt
+    if (game.gameId) {
+      const existing = await repo.findGameBatch(game.gameId, game.sentAt);
+      if (existing) {
+        return ok({ ok: true, duplicate: true, batchId: existing.id, participants: existing.result?.count || 0 });
+      }
+    }
+
+    const [settings, questions, personalities] = await Promise.all([
+      repo.getSettings(), repo.listQuestions(), repo.allPersonalities(),
+    ]);
+    const participants = gamePayloadToParticipants(game, questions);
+    const result = scoreBatch(participants, questions, personalities, matchOptions(settings));
+
+    // צירוף נתוני המשחק (ניקוד/נכונות/קבוצה) לכל תוצאה מחושבת
+    const gameById = new Map(participants.map((p) => [p.id, p.game]));
+    for (const r of result.results) if (gameById.has(r.id)) r.game = gameById.get(r.id);
+
+    const batch = {
+      id: newId('batch'),
+      name: `🎮 ${game.gameName || 'משחק'} · ${String(game.sentAt).slice(0, 10)}`,
+      createdAt: game.sentAt || new Date().toISOString(),
+      source: 'game',
+      gameId: game.gameId,
+      sentAt: game.sentAt,
+      game: {
+        gameId: game.gameId, gameName: game.gameName, sentAt: game.sentAt,
+        participantCount: game.participantCount, questions: game.questions, groups: game.groups,
+      },
+      participants,
+      result,
+    };
+    await repo.addBatch(batch);
+    return ok({ ok: true, stored: true, batchId: batch.id, participants: result.count });
+  }
+
+  add('POST', '/api/games/webhook', async ({ body, query }) => {
+    if (!checkGameToken(query)) return err('טוקן שגוי', 401);
+    return handleGameSubmission(body);
+  });
+
+  add('GET', '/api/games/webhook', async ({ query }) => {
+    if (!checkGameToken(query)) return err('טוקן שגוי', 401);
+    if (!query.payload) return err('חסר פרמטר payload', 400);
+    let parsed;
+    try {
+      parsed = JSON.parse(query.payload);
+    } catch {
+      return err('payload אינו JSON תקין', 400);
+    }
+    return handleGameSubmission(parsed);
+  });
+
+  // פרטי האינטגרציה לפאנל הניהול (כתובת ה-webhook, האם נדרש טוקן)
+  add('GET', '/api/integration', async () => ok({
+    webhookPath: '/api/games/webhook',
+    method: 'POST',
+    tokenRequired: !!process.env.GAME_TOKEN,
+  }));
 
   // ---- סטטיסטיקה ללוח הבקרה ----
   add('GET', '/api/stats', async () => {

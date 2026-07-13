@@ -126,6 +126,7 @@ export class JsonRepo {
       id: b.id,
       name: b.name,
       createdAt: b.createdAt,
+      source: b.source || null,
       count: b.result?.count || 0,
     }));
   }
@@ -134,6 +135,9 @@ export class JsonRepo {
   }
   async getBatch(id) {
     return this._s().batches.find((b) => b.id === id) || null;
+  }
+  async findGameBatch(gameId, sentAt) {
+    return this._s().batches.find((b) => b.gameId === gameId && b.sentAt === sentAt) || null;
   }
   async addBatch(b) {
     this._s().batches.push(b);

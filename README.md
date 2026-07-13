@@ -71,9 +71,11 @@ npm run reset # איפוס הנתונים לברירת מחדל
    ```
    DATABASE_URL=postgres://postgres:הסיסמה@srv-captain--elements-db:5432/postgres
    ADMIN_TOKEN=בחרו-סוד-חזק
+   GAME_TOKEN=סוד-לאינטגרציית-המשחק
    ```
    * `DATABASE_URL` — מחבר את ה-Web ל-DB (הסכימה והזריעה נוצרות אוטומטית בהפעלה ראשונה).
    * `ADMIN_TOKEN` — **חשוב!** בלעדיו פאנל הניהול חשוף לכל.
+   * `GAME_TOKEN` — אופציונלי; אם מוגדר, כתובת ה-webhook בעורך המשחק חייבת לכלול `?token=...`.
 4. **HTTP Settings** — הפעילו Enable HTTPS + Force HTTPS.
 
 הקונטיינר מאזין על פורט 80 (ברירת המחדל של CapRover) — אין צורך בהגדרת פורט ידנית.
@@ -129,6 +131,36 @@ npm run reset # איפוס הנתונים לברירת מחדל
 
 ---
 
+## אינטגרציית משחק (webhook)
+
+מערכת המשחק ("משחק פונקציה") שולחת את תוצאות המשחק בסיום, מדפדפן המנחה, ל-endpoint:
+
+```
+POST /api/games/webhook          Content-Type: application/json   (גוף = מטען המשחק)
+GET  /api/games/webhook?payload=<JSON מקודד ב-URL-encoding>       (חלופה, מוגבל באורך)
+```
+
+* **CORS + preflight** — הבקשה מגיעה cross-origin מהדפדפן. השרת עונה ל-`OPTIONS` (204)
+  ומחזיר `Access-Control-Allow-Origin/Methods/Headers`, כך שה-POST האמיתי נשלח.
+* **טוקן אופציונלי** — הגדירו `GAME_TOKEN=סוד` בשרת, והוסיפו `?token=סוד` לכתובת בעורך המשחק.
+* **מניעת כפילויות** — לפי `gameId + sentAt` (אם המנחה נכנס שוב לשקופית, לא נוצר מפגש כפול).
+* **תגובה מהירה 2xx** — מחזיר `200` עם `{ ok, stored|duplicate, batchId, participants }`.
+
+### מה קורה עם התוצאות
+כל משתתף מהמשחק (`number`, `name`, ורשימת `answers` של `{queId, answerId}`) מומר
+למשתתף במערכת שלנו, מחושב לו **פרופיל יסודות** ומוצמד **סוג אישיות** — התוצאה נשמרת
+כ**מפגש** (עם תג 🎮) שזורם ללוח הבקרה, לסטטיסטיקות ולצפייה, יחד עם ניקוד המשחק המקורי.
+
+### מיפוי שאלות/תשובות
+כדי שהתשובות יתמפו נכון ליסודות, בטאב **שאלות** מגדירים לכל שאלה:
+* `queId` — מזהה השאלה במערכת המשחק.
+* `answerId` — לכל אפשרות, מזהה התשובה במשחק, בצירוף היסוד שהיא מייצגת.
+
+אם לא מוגדרים — נעשה מיפוי **לפי מיקום** (queId ה-N ← השאלה ה-N, answerId ה-M ← האפשרות ה-M).
+כתובת ה-webhook המלאה מוצגת בטאב "שיוך משתתפים" בפאנל הניהול (עם כפתור העתקה).
+
+---
+
 ## פאנל הניהול
 
 | טאב | תיאור |
@@ -154,6 +186,8 @@ npm run reset # איפוס הנתונים לברירת מחדל
 | POST | `/api/score` | שקלול קבוצת משתתפים (ללא שמירה) |
 | GET/POST/DELETE | `/api/batches[/:id]` | מפגשים שמורים |
 | GET | `/api/stats` | נתוני לוח הבקרה |
+| POST/GET | `/api/games/webhook` | קבלת תוצאות ממערכת המשחק (CORS, dedup) |
+| GET | `/api/integration` | פרטי ה-webhook לפאנל |
 | GET | `/api/export` · POST `/api/import` · POST `/api/reset` | כלי מאגר |
 
 ---
@@ -165,6 +199,7 @@ server.js              שרת HTTP (Node) + ניתוב + הגשת קבצים + �
 src/
   scoring.js           מנוע השקלול וההתאמה (טהור, נבדק ביחידות)
   seed.js              יסודות, הגדרות, שאלות לדוגמה, מחולל סוגי האישיות
+  game.js              אינטגרציית המשחק — אימות ומיפוי מטען התוצאות
   api.js               הגדרת ה-endpoints (מול repo, אסינכרוני)
   store.js             מנוע אחסון קובץ JSON (כתיבה אטומית)
   repo/
@@ -178,6 +213,7 @@ public/
   js/                  api.js · quiz.js · admin.js
 test/
   scoring.test.js      בדיקות מנוע השקלול
+  game.test.js         בדיקות אינטגרציית המשחק (מיפוי + שקלול)
   repo.test.js         בדיקת פאריטי: JsonRepo ו-PgRepo (דרך pg-mem)
 Dockerfile             דימוי לפריסה (CapRover)
 captain-definition     הגדרת CapRover
