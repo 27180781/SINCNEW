@@ -39,6 +39,29 @@ npm run reset # איפוס הנתונים לברירת מחדל
 
 ---
 
+## פריסה ל-CapRover
+
+הפרויקט כולל `captain-definition` ו-`Dockerfile` מוכנים (אפליקציית Node ללא תלויות).
+
+1. ב-CapRover: **Apps → Create New App** (למשל `elements`).
+2. **Deployment** — בחרו שיטה:
+   * מ-GitHub: הדביקו את כתובת הריפו + הענף `claude/personality-elements-system-ww1x3s`.
+   * או מהמחשב: `npm i -g caprover` ואז `caprover deploy` מתיקיית הפרויקט.
+3. **App Configs → Environmental Variables** — הגדירו טוקן ניהול (חשוב! הפאנל יהיה חשוף אחרת):
+   ```
+   ADMIN_TOKEN=בחרו-סוד-חזק
+   ```
+4. **Persistent Directories** (כדי שהנתונים ישרדו פריסות מחדש) — הוסיפו נתיב:
+   * Path in App: `/app/data`
+5. **HTTPS** — הפעילו Enable HTTPS + Force HTTPS בטאב HTTP Settings.
+
+הקונטיינר מאזין על פורט 80 (ברירת המחדל של CapRover) — אין צורך בהגדרת פורט ידנית.
+
+> הערה: האחסון הוא קובץ JSON. ה-Persistent Directory הכרחי — בלעדיו הנתונים
+> (שאלות, סוגי אישיות, מפגשים) יימחקו בכל פריסה/הפעלה מחדש.
+
+---
+
 ## איך זה עובד
 
 ### 1. שאלות ומיפוי יסודות
