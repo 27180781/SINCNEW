@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>מבחן ארבעת היסודות</title>
+  <link rel="stylesheet" href="/css/app.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><span>🌿</span> ארבעת היסודות</div>
+    <nav>
+      <a href="/" class="active">המבחן</a>
+      <a href="/admin">ניהול</a>
+    </nav>
+  </div>
+
+  <div class="wrap">
+    <div class="card" id="intro">
+      <h1 id="title">אפיון אישיות לפי ארבעת יסודות הבריאה</h1>
+      <p id="subtitle" class="muted-box">אש · מים · רוח · עפר</p>
+      <p>ענו על השאלות הבאות לפי מה שהכי מרגיש נכון עבורכם. בסיום המערכת תחשב את הרכב היסודות שלכם ותצמיד את סוג האישיות הקרוב ביותר.</p>
+      <div class="field" style="max-width:320px">
+        <label for="pname">שם (רשות)</label>
+        <input id="pname" placeholder="איך קוראים לך?" />
+      </div>
+      <button class="primary" id="startBtn">התחלת המבחן ⟵</button>
+    </div>
+
+    <form id="quizForm" style="display:none"></form>
+
+    <div id="result" style="display:none"></div>
+  </div>
+
+  <script type="module" src="/js/quiz.js"></script>
+</body>
+</html>

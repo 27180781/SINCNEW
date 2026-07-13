@@ -1,0 +1,17 @@
+{
+  "name": "elements-personality-system",
+  "version": "0.1.0",
+  "description": "מערכת אפיון אישיות לפי ארבעת יסודות הבריאה (אש · מים · רוח · עפר)",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test",
+    "reset": "node scripts/reset-data.js"
+  },
+  "author": "",
+  "license": "MIT"
+}

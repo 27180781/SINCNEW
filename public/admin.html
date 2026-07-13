@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>פאנל ניהול — ארבעת היסודות</title>
+  <link rel="stylesheet" href="/css/app.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><span>⚙️</span> פאנל ניהול <span class="dots">· · · ·</span></div>
+    <nav>
+      <a href="/">המבחן</a>
+      <a href="/admin" class="active">ניהול</a>
+    </nav>
+  </div>
+
+  <div class="wrap">
+    <div class="tabs" id="tabs">
+      <button data-tab="dashboard" class="active">לוח בקרה</button>
+      <button data-tab="questions">שאלות</button>
+      <button data-tab="personalities">סוגי אישיות</button>
+      <button data-tab="participants">שיוך משתתפים</button>
+      <button data-tab="settings">הגדרות</button>
+    </div>
+
+    <!-- לוח בקרה -->
+    <section class="tab-panel active" id="tab-dashboard">
+      <div class="grid cols-4" id="statCards"></div>
+      <div class="card">
+        <h2>ממוצע יסודות (כלל המשתתפים)</h2>
+        <div id="elemAverages"></div>
+      </div>
+      <div class="card">
+        <h2>סוגי האישיות הנפוצים</h2>
+        <div id="topPersonalities"></div>
+      </div>
+    </section>
+
+    <!-- שאלות -->
+    <section class="tab-panel" id="tab-questions">
+      <div class="card">
+        <div class="row">
+          <h2 style="margin:0">שאלות המבחן</h2>
+          <div class="spacer"></div>
+          <button class="primary" id="addQuestionBtn">+ שאלה חדשה</button>
+        </div>
+        <p><small>לכל שאלה 4 אפשרויות, וכל אפשרות ממופה ליסוד. זהו "השיוך של כל שאלה לערך".</small></p>
+        <div id="questionsList"></div>
+      </div>
+    </section>
+
+    <!-- סוגי אישיות -->
+    <section class="tab-panel" id="tab-personalities">
+      <div class="card">
+        <div class="row">
+          <h2 style="margin:0">מאגר סוגי האישיות</h2>
+          <span class="badge" id="persCount">0</span>
+          <div class="spacer"></div>
+          <input id="persSearch" placeholder="חיפוש…" style="max-width:200px" />
+          <button id="addPersBtn" class="primary">+ סוג חדש</button>
+          <button id="bulkPersBtn">ייבוא JSON</button>
+          <button id="genPersBtn">חידוש מאגר</button>
+        </div>
+        <div id="personalitiesList"></div>
+        <div class="row" id="persPager" style="justify-content:center;margin-top:12px"></div>
+      </div>
+    </section>
+
+    <!-- שיוך משתתפים -->
+    <section class="tab-panel" id="tab-participants">
+      <div class="grid cols-2">
+        <div class="card">
+          <h2>קלט JSON של משתתפים</h2>
+          <p><small>הזינו רשימת משתתפים ותשובותיהם. המערכת תשקלל ותצמיד סוג אישיות לכל אחד.</small></p>
+          <div class="field">
+            <label>שם המפגש (רשות)</label>
+            <input id="batchName" placeholder="למשל: כיתה א' 2026" />
+          </div>
+          <textarea id="participantsJson" spellcheck="false"></textarea>
+          <div class="row" style="margin-top:10px">
+            <button class="primary" id="runScoreBtn">שקלול</button>
+            <button id="saveBatchBtn">שמירת מפגש</button>
+            <button id="loadExampleBtn" class="ghost">טעינת דוגמה</button>
+            <div class="spacer"></div>
+            <button id="downloadResultsBtn" class="ghost" disabled>הורדת תוצאות</button>
+          </div>
+        </div>
+        <div class="card">
+          <h2>מבנה הקלט</h2>
+          <div class="muted-box" id="formatHelp"></div>
+          <h3 style="margin-top:14px">מפגשים שמורים</h3>
+          <div id="batchesList"></div>
+        </div>
+      </div>
+      <div class="card" id="scoreResults" style="display:none">
+        <h2>תוצאות השקלול</h2>
+        <div id="scoreAverages"></div>
+        <div id="scoreTable"></div>
+      </div>
+    </section>
+
+    <!-- הגדרות -->
+    <section class="tab-panel" id="tab-settings">
+      <div class="card">
+        <h2>הגדרות כלליות</h2>
+        <div class="grid cols-2">
+          <div class="field"><label>כותרת המערכת</label><input id="setTitle" /></div>
+          <div class="field"><label>כותרת משנה</label><input id="setSubtitle" /></div>
+        </div>
+        <div class="grid cols-2">
+          <div class="field">
+            <label>מדד מרחק להתאמה</label>
+            <select id="setMetric">
+              <option value="euclidean">אוקלידי (מומלץ)</option>
+              <option value="manhattan">מנהטן</option>
+            </select>
+          </div>
+          <div class="field"><label>כמות התאמות מובילות להצגה</label><input id="setTopN" type="number" min="1" max="10" /></div>
+        </div>
+        <button class="primary" id="saveSettingsBtn">שמירת הגדרות</button>
+      </div>
+      <div class="card">
+        <h2>היסודות</h2>
+        <div id="elementsEditor" class="grid cols-2"></div>
+      </div>
+      <div class="card">
+        <h2>כלים</h2>
+        <div class="row">
+          <button id="exportBtn">ייצוא מאגר מלא</button>
+          <button id="resetBatchesBtn" class="danger">מחיקת כל המפגשים</button>
+          <button id="resetAllBtn" class="danger">איפוס מלא לברירת מחדל</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- מודאל כללי -->
+  <div class="modal-back" id="modalBack">
+    <div class="modal" id="modal"></div>
+  </div>
+
+  <script type="module" src="/js/admin.js"></script>
+</body>
+</html>
