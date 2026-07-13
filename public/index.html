@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>מבחן ארבעת היסודות</title>
+  <title>ארבעת היסודות</title>
   <link rel="stylesheet" href="/css/app.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>" />
 </head>
@@ -11,28 +11,30 @@
   <div class="topbar">
     <div class="brand"><span>🌿</span> ארבעת היסודות</div>
     <nav>
-      <a href="/" class="active">המבחן</a>
+      <a href="/" class="active">דף הבית</a>
       <a href="/admin">ניהול</a>
     </nav>
   </div>
 
   <div class="wrap">
-    <div class="card" id="intro">
+    <div class="card">
       <h1 id="title">אפיון אישיות לפי ארבעת יסודות הבריאה</h1>
       <p id="subtitle" class="muted-box">אש · מים · רוח · עפר</p>
-      <p>ענו על השאלות הבאות לפי מה שהכי מרגיש נכון עבורכם. בסיום המערכת תחשב את הרכב היסודות שלכם ותצמיד את סוג האישיות הקרוב ביותר.</p>
-      <div class="field" style="max-width:320px">
-        <label for="pname">שם (רשות)</label>
-        <input id="pname" placeholder="איך קוראים לך?" />
+      <p>המערכת מקבלת את תוצאות המשחק, מחשבת לכל משתתף את הרכב ארבעת היסודות
+        (אש 🔥 · מים 💧 · רוח 🌬️ · עפר 🌱) באחוזים, ומצמידה לו את סוג האישיות הקרוב ביותר
+        מתוך מאגר של מאות סוגים.</p>
+      <div class="muted-box">
+        המבחן עצמו מנוהל ומוצג ב<strong>מערכת המשחק</strong>. כאן מוגדר <strong>מיפוי היסודות</strong>
+        (איזה יסוד מייצגת כל תשובה בכל שאלה) ומתקבלות התוצאות דרך ה-webhook.
       </div>
-      <button class="primary" id="startBtn">התחלת המבחן ⟵</button>
+      <p style="margin-top:16px">
+        <a class="btn primary" href="/admin">כניסה לפאנל הניהול ⟵</a>
+      </p>
     </div>
 
-    <form id="quizForm" style="display:none"></form>
-
-    <div id="result" style="display:none"></div>
+    <div class="grid cols-4" id="elementCards"></div>
   </div>
 
-  <script type="module" src="/js/quiz.js"></script>
+  <script type="module" src="/js/landing.js"></script>
 </body>
 </html>

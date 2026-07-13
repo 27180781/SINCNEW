@@ -61,104 +61,7 @@ async function loadDashboard() {
 }
 
 // ============================================================
-//  שאלות
-// ============================================================
-async function loadQuestions() {
-  state.questions = await api.get('/api/questions');
-  const list = document.getElementById('questionsList');
-  list.innerHTML = '';
-  if (!state.questions.length) { list.appendChild(el('div', { class: 'empty' }, 'אין שאלות. הוסיפו שאלה חדשה.')); return; }
-  state.questions.forEach((q, i) => {
-    const card = el('div', { class: 'card', style: 'padding:14px' });
-    const head = el('div', { class: 'row' }, [
-      el('strong', {}, `${i + 1}. ${q.text}`),
-      q.queId != null ? el('span', { class: 'badge', title: 'queId במערכת המשחק' }, `queId ${q.queId}`) : null,
-      el('div', { class: 'spacer' }),
-      el('button', { class: 'small', onclick: () => editQuestion(q) }, 'עריכה'),
-      el('button', { class: 'small danger', onclick: () => delQuestion(q) }, 'מחיקה'),
-    ]);
-    card.appendChild(head);
-    const opts = el('div', { class: 'row', style: 'margin-top:8px' });
-    (q.options || []).forEach((o) => {
-      const prefix = o.answerId != null ? `[${o.answerId}] ` : '';
-      opts.appendChild(el('span', { class: `el-chip el-${o.element}` }, `${prefix}${elEmoji(o.element)} ${o.text}`));
-    });
-    card.appendChild(opts);
-    list.appendChild(card);
-  });
-}
-
-function elementSelect(value) {
-  const sel = el('select');
-  ELEMENT_ORDER.forEach((k) => {
-    const o = el('option', { value: k }, `${elEmoji(k)} ${elLabel(k)}`);
-    if (k === value) o.selected = true;
-    sel.appendChild(o);
-  });
-  return sel;
-}
-
-function editQuestion(q) {
-  const isNew = !q;
-  const data = q || { text: '', options: ELEMENT_ORDER.map((k) => ({ text: '', element: k })) };
-  const form = el('div');
-  form.appendChild(el('h2', {}, isNew ? 'שאלה חדשה' : 'עריכת שאלה'));
-  const textField = el('div', { class: 'field' }, [el('label', {}, 'טקסט השאלה'), el('input', { id: 'q_text', value: data.text })]);
-  form.appendChild(textField);
-  const queIdInput = el('input', { id: 'q_queId', type: 'number', value: data.queId ?? '', placeholder: 'ריק = לפי מיקום' });
-  form.appendChild(el('div', { class: 'field' }, [
-    el('label', {}, 'queId — מזהה השאלה במערכת המשחק (לאינטגרציה)'), queIdInput,
-  ]));
-  form.appendChild(el('label', {}, 'אפשרויות: answerId · טקסט · יסוד'));
-  const optRows = [];
-  const opts = (data.options && data.options.length ? data.options : ELEMENT_ORDER.map((k) => ({ text: '', element: k }))).slice(0, 4);
-  while (opts.length < 4) opts.push({ text: '', element: ELEMENT_ORDER[opts.length] });
-  opts.forEach((o, i) => {
-    const ansInput = el('input', { type: 'number', value: o.answerId ?? '', placeholder: `${i + 1}`, title: 'answerId (מזהה התשובה במשחק). ריק = לפי מיקום' });
-    const input = el('input', { value: o.text, placeholder: 'טקסט התשובה' });
-    const sel = elementSelect(o.element);
-    optRows.push({ input, sel, ansInput, id: o.id });
-    form.appendChild(el('div', { class: 'row', style: 'margin-bottom:8px' }, [
-      el('div', { style: 'width:70px' }, ansInput), el('div', { style: 'flex:1' }, input), el('div', { style: 'width:130px' }, sel),
-    ]));
-  });
-  const actions = el('div', { class: 'row', style: 'margin-top:12px' }, [
-    el('button', { class: 'primary', onclick: save }, 'שמירה'),
-    el('button', { onclick: closeModal }, 'ביטול'),
-  ]);
-  form.appendChild(actions);
-  openModal(form);
-
-  async function save() {
-    const queIdVal = document.getElementById('q_queId').value.trim();
-    const payload = {
-      text: document.getElementById('q_text').value.trim(),
-      queId: queIdVal === '' ? null : Number(queIdVal),
-      options: optRows.map((r) => ({
-        id: r.id,
-        text: r.input.value.trim(),
-        element: r.sel.value,
-        answerId: r.ansInput.value.trim() === '' ? null : Number(r.ansInput.value),
-        weight: 1,
-      })),
-    };
-    if (!payload.text) return toast('טקסט השאלה חסר', true);
-    try {
-      if (isNew) await api.post('/api/questions', payload);
-      else await api.put(`/api/questions/${q.id}`, payload);
-      closeModal(); toast('נשמר'); loadQuestions();
-    } catch (e) { toast(e.message, true); }
-  }
-}
-
-async function delQuestion(q) {
-  if (!confirm(`למחוק את השאלה "${q.text}"?`)) return;
-  await api.del(`/api/questions/${q.id}`); toast('נמחק'); loadQuestions();
-}
-document.getElementById('addQuestionBtn').addEventListener('click', () => editQuestion(null));
-
-// ============================================================
-//  מיפוי יסודות (רשת עריכה + ייבוא Excel/CSV)
+//  מיפוי יסודות (רשת עריכה + ייבוא Excel/CSV) — המקור היחיד למיפוי השאלות
 // ============================================================
 async function loadMapping() {
   const qs = await api.get('/api/questions');
@@ -196,7 +99,7 @@ function renderMappingGrid() {
   const t = el('table');
   let head = '<thead><tr><th>מס׳ שאלה</th>';
   for (let i = 1; i <= maxOpts; i++) head += `<th>תשובה ${i}</th>`;
-  head += '<th>טקסט (רשות)</th><th></th></tr></thead>';
+  head += '<th></th></tr></thead>';
   t.innerHTML = head;
   const tb = el('tbody');
   qs.forEach((q, ri) => {
@@ -211,10 +114,6 @@ function renderMappingGrid() {
       if (opt.answerId == null) opt.answerId = c + 1;
       tr.appendChild(el('td', {}, mappingElementSelect(opt.element, (v) => { opt.element = v; })));
     }
-    tr.appendChild(el('td', {}, el('input', {
-      value: q.text || '', style: 'min-width:150px', placeholder: `שאלה ${q.queId ?? ''}`,
-      oninput: (e) => { q.text = e.target.value; },
-    })));
     tr.appendChild(el('td', {}, el('button', {
       class: 'small danger', onclick: () => { state.mapping.splice(ri, 1); renderMappingGrid(); },
     }, '✕')));
@@ -241,6 +140,15 @@ document.getElementById('saveMappingBtn').addEventListener('click', async () => 
   try {
     await api.put('/api/questions', payload);
     toast('המיפוי נשמר');
+    loadMapping();
+  } catch (e) { toast(e.message, true); }
+});
+
+document.getElementById('clearMappingBtn').addEventListener('click', async () => {
+  if (!confirm('למחוק את כל המיפוי? כל השאלות יימחקו (אפשר להעלות מחדש מקובץ).')) return;
+  try {
+    await api.put('/api/questions', []);
+    toast('כל המיפוי נמחק');
     loadMapping();
   } catch (e) { toast(e.message, true); }
 });
@@ -640,7 +548,6 @@ document.getElementById('resetAllBtn').addEventListener('click', async () => {
 // ============================================================
 const loaders = {
   dashboard: loadDashboard,
-  questions: loadQuestions,
   mapping: loadMapping,
   personalities: () => loadPersonalities(),
   participants: () => { renderFormatHelp(); loadIntegration(); loadBatches(); if (!state.questions.length) api.get('/api/questions').then((q) => { state.questions = q; }); },
