@@ -1,9 +1,9 @@
-# מערכת ארבעת היסודות — Node עם תלות אחת (pg) לחיבור PostgreSQL
+# מערכת ארבעת היסודות — Node עם תלויות ייצור: pg (PostgreSQL) + fflate (קריאת Excel)
 FROM node:22-alpine
 
 WORKDIR /app
 
-# התקנת תלויות ייצור בלבד (pg). devDependencies כמו pg-mem לא מותקנות.
+# התקנת תלויות ייצור בלבד (pg, fflate). devDependencies כמו pg-mem לא מותקנות.
 COPY package*.json ./
 RUN npm install --omit=dev --no-audit --no-fund
 
