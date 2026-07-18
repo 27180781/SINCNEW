@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildIntroText, findLatestParticipantByPhone, toYemotRead } from '../src/intro.js';
+import { buildIntroText, findLatestParticipantByPhone, toYemotRead, toYemotIdList } from '../src/intro.js';
 
 const ELEMENTS = [
   { key: 'fire', label: 'אש' },
@@ -54,20 +54,22 @@ test('buildIntroText: תיקו על הדומיננטי => מדלגים על שו
   assert.match(t, /40 אחוז יסוד המים/);
 });
 
-test('toYemotRead: פורמט read=t- עם קטע לכל שורה', () => {
-  const out = toYemotRead('שלום לך\nובפירוט\n50 אחוז יסוד האש');
-  assert.match(out, /^read=t-/);
-  // כל שורה הופכת לקטע t- נפרד
-  assert.ok(out.includes('.t-ובפירוט'));
-  assert.ok(out.includes('.t-50 אחוז יסוד האש'));
-  // אין תווים ששוברים את הפורמט
-  assert.ok(!out.includes('='.repeat(1) + 't') || out.startsWith('read=t-'));
+test('toYemotIdList: פורמט id_list_message=t-<שורה>.t-<שורה> (לא JSON)', () => {
+  const out = toYemotIdList('שלום לך\nובפירוט\n50 אחוז יסוד האש');
+  assert.equal(out, 'id_list_message=t-שלום לך.t-ובפירוט.t-50 אחוז יסוד האש');
 });
 
-test('toYemotRead: מנטרל תווים בעייתיים (= & . שורות)', () => {
-  const out = toYemotRead('שלום=ל&דנה.כאן');
-  // = & . הוחלפו ברווח, נשאר קטע אחד
-  assert.equal(out, 'read=t-שלום ל דנה כאן');
+test('toYemotIdList: מנטרל תווים אסורים ל-TTS (. - " \' & | =)', () => {
+  const out = toYemotIdList('בן-ציון="הכי&טוב".כאן');
+  // התווים האסורים בטקסט הוחלפו ברווח (הפורמט עצמו כולל t- ו-id_list_message=)
+  assert.equal(out, 'id_list_message=t-בן ציון הכי טוב כאן');
+  const dataPart = out.replace(/^id_list_message=t-/, '');
+  assert.doesNotMatch(dataPart, /[."'&|]/); // אין תווים אסורים בטקסט עצמו
+});
+
+test('toYemotRead: פקודת read מלאה עם אפשרויות', () => {
+  const out = toYemotRead('שלום לך\nובפירוט');
+  assert.match(out, /^read=t-שלום לך\.t-ובפירוט=res,/); // read=<messages>=<options>
 });
 
 test('findLatestParticipantByPhone: מאתר לפי טלפון ובוחר את המפגש העדכני', () => {

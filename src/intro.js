@@ -60,39 +60,37 @@ export function buildIntroText(result, elements) {
   return lines.join('\n');
 }
 
-// ניקוי קטע טקסט לפורמט read של ימות:
-// '.' מפריד בין קטעי הקראה, '=' ו-'&' שוברים את פירוק התשובה — מנטרלים אותם.
+// תווים אסורים ל-TTS של ימות (לפי yemot-router): . - " ' & | ; וגם '=' מפריד פורמט.
 function sanitizeYemotSegment(s) {
   return String(s)
-    .replace(/[=&]/g, ' ')
-    .replace(/\./g, ' ')
+    .replace(/[.\-"'&|=]/g, ' ')
     .replace(/[\r\n]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-/**
- * ממיר טקסט (עם שורות) לפורמט הקראה של ימות המשיח:
- *   read=t-<שורה1>.t-<שורה2>...
- * כל שורה הופכת לקטע הקראה נפרד (t-), עם הפסקה טבעית ביניהם.
- */
-export function toYemotRead(text) {
+// בונה את מחרוזת ההודעות של ימות: t-<שורה1>.t-<שורה2>... (כל שורה קטע הקראה נפרד).
+function messagesCombined(text) {
   const parts = String(text)
     .split('\n')
     .map(sanitizeYemotSegment)
     .filter((s) => s.length > 0);
-  return 'read=t-' + (parts.length ? parts.join('.t-') : ' ');
+  return parts.length ? parts.map((p) => `t-${p}`).join('.') : 't- ';
 }
 
 /**
- * פורמט חלופי של ימות: id_list_message — משמיע את הטקסט וממשיך (מתאים ל-api_end_goto).
- * כל שורה = פריט נפרד. JSON.stringify מטפל בבריחת תווים.
+ * id_list_message=<messages> — משמיע את הטקסט וממשיך (מתאים ל-api_end_goto).
+ * זהו הפורמט הנכון להשמעה בלבד (הפורמט של yemot-router).
  */
 export function toYemotIdList(text) {
-  const items = String(text)
-    .split('\n')
-    .map((s) => s.replace(/[\r\n]+/g, ' ').trim())
-    .filter((s) => s.length > 0)
-    .map((s) => ({ type: 'text', data: s }));
-  return 'id_list_message=' + JSON.stringify(items.length ? items : [{ type: 'text', data: ' ' }]);
+  return 'id_list_message=' + messagesCombined(text);
+}
+
+/**
+ * read=<messages>=<options> — פקודת "קרא" מלאה (משמיע וממתין לקלט).
+ * פחות מתאים כאן (עדיף id_list_message), אך זמין כחלופה.
+ */
+export function toYemotRead(text) {
+  // אפשרויות tap עם ברירות מחדל של ימות: valName,re_enter,max,min,sec_wait,playback,...
+  return `read=${messagesCombined(text)}=res,no,,1,7,No,no,no,,,,,,`;
 }
