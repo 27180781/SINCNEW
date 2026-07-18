@@ -25,6 +25,8 @@ const PUBLIC_API = new Set([
   'POST /api/score',
   'GET /api/games/webhook', // webhook המשחק — מוגן בטוקן משלו (GAME_TOKEN), לא ב-ADMIN_TOKEN
   'POST /api/games/webhook',
+  'GET /api/get-intro-text', // ימות המשיח קוראת לזה עם ApiPhone — נתיב ציבורי
+  'POST /api/get-intro-text',
 ]);
 const WEBHOOK_PATH = '/api/games/webhook';
 
@@ -171,6 +173,11 @@ const server = http.createServer(async (req, res) => {
     }
     try {
       const result = await route.handler({ req, res, params: route.params, query, body });
+      // תמיכה בתשובת טקסט גולמי (למשל טקסט הקראה לימות המשיח)
+      if (result && result.contentType) {
+        res.writeHead(result.status || 200, { 'Content-Type': result.contentType });
+        return res.end(result.body != null ? String(result.body) : '');
+      }
       return sendJson(res, result.status || 200, result.body);
     } catch (e) {
       console.error('שגיאת שרת:', e);

@@ -342,15 +342,18 @@ async function loadIntegration() {
     const info = await api.get('/api/integration');
     document.getElementById('webhookUrl').value = window.location.origin + info.webhookPath;
     document.getElementById('integrationToken').textContent = info.tokenRequired ? '🔒 נדרש token ב-URL' : 'ללא טוקן';
+    if (info.introTextPath) document.getElementById('introTextUrl').value = window.location.origin + info.introTextPath;
   } catch { /* אין קריטי */ }
 }
-document.getElementById('copyWebhookBtn').addEventListener('click', () => {
-  const inp = document.getElementById('webhookUrl');
+function copyInput(id) {
+  const inp = document.getElementById(id);
   inp.select();
   const done = () => toast('הכתובת הועתקה');
-  if (navigator.clipboard) navigator.clipboard.writeText(inp.value).then(done).catch(() => document.execCommand('copy') && done());
+  if (navigator.clipboard) navigator.clipboard.writeText(inp.value).then(done).catch(() => { document.execCommand('copy'); done(); });
   else { document.execCommand('copy'); done(); }
-});
+}
+document.getElementById('copyWebhookBtn').addEventListener('click', () => copyInput('webhookUrl'));
+document.getElementById('copyIntroUrlBtn').addEventListener('click', () => copyInput('introTextUrl'));
 
 function exampleParticipants() {
   const qs = state.questions.length ? state.questions : [];

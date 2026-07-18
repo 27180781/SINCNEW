@@ -9,9 +9,11 @@ import { validateGamePayload, gamePayloadToParticipants } from './game.js';
 import { parseXlsx } from './xlsx.js';
 import { parseCsv, rowsToQuestions } from './mapping.js';
 import { collectPhones, sendTzintuk, normalizePhone } from './tzintuk.js';
+import { findLatestParticipantByPhone, buildIntroText } from './intro.js';
 
 const ok = (body, status = 200) => ({ status, body });
 const err = (message, status = 400) => ({ status, body: { error: message } });
+const textResp = (body, status = 200) => ({ status, body: String(body), contentType: 'text/plain; charset=utf-8' });
 
 function elementKeysFrom(settings) {
   const keys = (settings?.elements || []).map((e) => e.key);
@@ -454,6 +456,7 @@ export function createRouter(repo) {
   // פרטי האינטגרציה לפאנל הניהול (כתובת ה-webhook, האם נדרש טוקן)
   add('GET', '/api/integration', async () => ok({
     webhookPath: '/api/games/webhook',
+    introTextPath: '/api/get-intro-text',
     method: 'POST',
     tokenRequired: !!process.env.GAME_TOKEN,
     notifyTokenSet: !!process.env.YEMOT_TOKEN, // האם YEMOT_TOKEN הוגדר בשרת
@@ -471,6 +474,23 @@ export function createRouter(repo) {
     });
     return ok(r);
   });
+
+  // ---- טקסט פתיח אישי להקראה (ימות המשיח קוראת עם ApiPhone) ----
+  async function introTextHandler({ query, body }) {
+    const phoneRaw = query.ApiPhone ?? query.apiPhone ?? query.phone ?? body?.ApiPhone ?? body?.phone;
+    const settings = await repo.getSettings();
+    const elements = settings.elements || [];
+    if (!normalizePhone(phoneRaw)) return textResp('שלום, לא זוהה מספר טלפון תקין.');
+
+    const batches = await repo.allBatches();
+    const result = findLatestParticipantByPhone(batches, phoneRaw);
+    if (!result || !(result.answered > 0)) {
+      return textResp('שלום, לא נמצאו עבורך תוצאות במערכת. ייתכן שטרם השתתפת במשחק.');
+    }
+    return textResp(buildIntroText(result, elements));
+  }
+  add('GET', '/api/get-intro-text', introTextHandler);
+  add('POST', '/api/get-intro-text', introTextHandler);
 
   // ---- סטטיסטיקה ללוח הבקרה ----
   add('GET', '/api/stats', async () => {

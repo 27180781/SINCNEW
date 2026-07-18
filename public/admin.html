@@ -96,7 +96,13 @@
           <input id="webhookUrl" readonly style="font-family:monospace;font-size:.8rem" />
           <button id="copyWebhookBtn">העתקה</button>
         </div>
-        <p><small>מיפוי: לכל שאלה הגדירו <code>queId</code> ולכל אפשרות <code>answerId</code> (בטאב "שאלות") כדי שיתאימו למזהי המשחק. אם לא הוגדרו — המיפוי לפי מיקום.</small></p>
+        <p><small>מיפוי: לכל שאלה הגדירו <code>queId</code> ולכל אפשרות <code>answerId</code> (בטאב "מיפוי יסודות"). אם לא הוגדרו — המיפוי לפי מיקום.</small></p>
+        <hr style="border:none;border-top:1px solid var(--line);margin:12px 0" />
+        <p style="margin:0"><small><strong>📞 טקסט פתיח לימות המשיח</strong> — הגדירו כתובת זו בשלוחת ה-API. ימות שולחת <code>ApiPhone</code> (מספר המתקשר), והמערכת מחזירה טקסט אישי להקראה:</small></p>
+        <div class="row" style="margin-top:6px">
+          <input id="introTextUrl" readonly style="font-family:monospace;font-size:.8rem" />
+          <button id="copyIntroUrlBtn">העתקה</button>
+        </div>
       </div>
       <div class="grid cols-2">
         <div class="card">
