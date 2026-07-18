@@ -203,11 +203,12 @@ async function loadPersonalities() {
   const list = document.getElementById('personalitiesList');
   list.innerHTML = '';
   const t = el('table');
-  t.innerHTML = '<thead><tr><th>שם</th><th>פרופיל</th><th>אחוזים</th><th></th></tr></thead>';
+  t.innerHTML = '<thead><tr><th>מס׳</th><th>שם</th><th>פרופיל</th><th>אחוזים</th><th></th></tr></thead>';
   const tb = el('tbody');
   data.items.forEach((p) => {
     const pct = ELEMENT_ORDER.map((k) => `${elEmoji(k)}${p.profile[k] || 0}`).join(' · ');
     tb.appendChild(el('tr', {}, [
+      el('td', {}, el('span', { class: 'badge' }, p.number != null ? String(p.number) : '—')),
       el('td', {}, [el('strong', {}, p.name), el('div', {}, el('small', {}, p.description || ''))]),
       el('td', {}, miniProfile(p.profile)),
       el('td', {}, el('small', {}, pct)),
@@ -240,9 +241,13 @@ function editPersonality(p) {
   const form = el('div');
   form.appendChild(el('h2', {}, isNew ? 'סוג אישיות חדש' : 'עריכת סוג אישיות'));
   const nameI = el('input', { value: data.name });
+  const numberI = el('input', { type: 'number', value: data.number ?? '', placeholder: 'ריק = אוטומטי' });
   const descI = el('textarea', { style: 'min-height:60px;font-family:inherit', value: data.description || '' });
   descI.value = data.description || '';
-  form.appendChild(el('div', { class: 'field' }, [el('label', {}, 'שם'), nameI]));
+  form.appendChild(el('div', { class: 'grid cols-2' }, [
+    el('div', { class: 'field' }, [el('label', {}, 'שם'), nameI]),
+    el('div', { class: 'field' }, [el('label', {}, 'מספר (קובץ שמע בימות)'), numberI]),
+  ]));
   form.appendChild(el('div', { class: 'field' }, [el('label', {}, 'תיאור'), descI]));
   const inputs = {};
   const sumLabel = el('strong', {}, '');
@@ -270,7 +275,12 @@ function editPersonality(p) {
   async function save() {
     const profile = {};
     ELEMENT_ORDER.forEach((k) => { profile[k] = Number(inputs[k].value) || 0; });
-    const payload = { name: nameI.value.trim(), description: descI.value.trim(), profile };
+    const payload = {
+      name: nameI.value.trim(),
+      number: numberI.value.trim() === '' ? null : Number(numberI.value),
+      description: descI.value.trim(),
+      profile,
+    };
     if (!payload.name) return toast('שם חסר', true);
     try {
       if (isNew) await api.post('/api/personalities', payload);
@@ -343,6 +353,7 @@ async function loadIntegration() {
     document.getElementById('webhookUrl').value = window.location.origin + info.webhookPath;
     document.getElementById('integrationToken').textContent = info.tokenRequired ? '🔒 נדרש token ב-URL' : 'ללא טוקן';
     if (info.introTextPath) document.getElementById('introTextUrl').value = window.location.origin + info.introTextPath;
+    if (info.archetypePath) document.getElementById('archetypeUrl').value = window.location.origin + info.archetypePath;
   } catch { /* אין קריטי */ }
 }
 function copyInput(id) {
@@ -354,6 +365,7 @@ function copyInput(id) {
 }
 document.getElementById('copyWebhookBtn').addEventListener('click', () => copyInput('webhookUrl'));
 document.getElementById('copyIntroUrlBtn').addEventListener('click', () => copyInput('introTextUrl'));
+document.getElementById('copyArchetypeUrlBtn').addEventListener('click', () => copyInput('archetypeUrl'));
 
 // ---- סימולטור שיחה (תצוגה + הקראה בדפדפן) ----
 let simText = '';
@@ -370,15 +382,23 @@ function buildSimElements() {
   });
 }
 
-function renderSimResult(text, yemot) {
+function renderSimResult(text, yemot, archetype) {
   simText = text || '';
   const box = document.getElementById('simResult');
   box.style.display = 'block';
   box.innerHTML = '';
   box.appendChild(el('div', { class: 'muted-box', style: 'white-space:pre-wrap;line-height:1.8;font-size:1.02rem' }, text || '(אין טקסט)'));
+  if (archetype && (archetype.number != null || archetype.name)) {
+    const parts = [];
+    if (archetype.name) parts.push(`🎭 ${archetype.name}`);
+    if (archetype.number != null) parts.push(`מספר: ${archetype.number}`);
+    if (archetype.similarity != null) parts.push(`התאמה ${archetype.similarity}%`);
+    box.appendChild(el('div', { class: 'muted-box', style: 'margin-top:8px;font-weight:700;border-inline-start:4px solid var(--accent)' },
+      `🔢 שלוחה 1 תחזיר את המספר: ${parts.join(' · ')}`));
+  }
   if (yemot) {
     const det = el('details', { style: 'margin-top:8px' });
-    det.appendChild(el('summary', { style: 'cursor:pointer;font-weight:700' }, 'פורמט read=t- (מה שנשלח לימות)'));
+    det.appendChild(el('summary', { style: 'cursor:pointer;font-weight:700' }, 'פורמט ימות (id_list_message — מה שנשלח לפתיח)'));
     const pre = el('pre', { style: 'white-space:pre-wrap;background:#f8f9fc;padding:10px;border-radius:8px;font-size:.78rem;overflow:auto' });
     pre.textContent = yemot;
     det.appendChild(pre);
@@ -405,7 +425,7 @@ document.getElementById('simGenerate').addEventListener('click', async () => {
   ELEMENT_ORDER.forEach((k) => { percentages[k] = Number(document.getElementById(`sim_${k}`).value) || 0; });
   try {
     const r = await api.post('/api/intro-preview', { name, percentages });
-    renderSimResult(r.text, r.yemot);
+    renderSimResult(r.text, r.yemot, r.match);
   } catch (e) { toast(e.message, true); }
 });
 
@@ -414,11 +434,12 @@ document.getElementById('simLoadPhone').addEventListener('click', async () => {
   if (!phone) return toast('הזן מספר טלפון', true);
   const enc = encodeURIComponent(phone);
   try {
-    const [text, yemot] = await Promise.all([
+    const [text, yemot, number] = await Promise.all([
       fetch(`/api/get-intro-text?ApiPhone=${enc}&format=text`).then((r) => r.text()),
       fetch(`/api/get-intro-text?ApiPhone=${enc}`).then((r) => r.text()),
+      fetch(`/api/get-archetype/by-phone?ApiPhone=${enc}`).then((r) => r.text()),
     ]);
-    renderSimResult(text, yemot);
+    renderSimResult(text, yemot, { number: number.trim() });
   } catch (e) { toast(e.message, true); }
 });
 
@@ -430,7 +451,7 @@ document.getElementById('simSaveDemo').addEventListener('click', async () => {
   ELEMENT_ORDER.forEach((k) => { percentages[k] = Number(document.getElementById(`sim_${k}`).value) || 0; });
   try {
     const r = await api.post('/api/intro-demo', { phone, name, percentages });
-    renderSimResult(r.text, r.yemot);
+    renderSimResult(r.text, r.yemot, r.match);
     toast(`נשמר! התקשר לימות עם ${r.phone} כדי לשמוע`);
     loadBatches();
   } catch (e) { toast(e.message, true); }

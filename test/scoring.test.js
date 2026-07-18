@@ -128,6 +128,15 @@ test('matchPersonality: מאגר ריק => null', () => {
   assert.equal(m.best, null);
 });
 
+test('matchPersonality: מחזיר את מספר סוג האישיות (לשלוחת ימות)', () => {
+  const personalities = [
+    { id: 'a', name: 'אש', number: 7, profile: { fire: 100, water: 0, air: 0, earth: 0 } },
+    { id: 'b', name: 'מים', number: 12, profile: { fire: 0, water: 100, air: 0, earth: 0 } },
+  ];
+  const m = matchPersonality({ fire: 90, water: 10, air: 0, earth: 0 }, personalities);
+  assert.equal(m.best.number, 7);
+});
+
 test('פענוח תשובה: מספר עם אפס מוביל (01 -> אינדקס 1)', () => {
   assert.equal(resolveAnswerToOption(QUESTIONS[0], '01').element, 'fire');
   assert.equal(resolveAnswerToOption(QUESTIONS[0], '02').element, 'water');

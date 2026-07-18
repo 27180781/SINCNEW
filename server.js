@@ -27,6 +27,8 @@ const PUBLIC_API = new Set([
   'POST /api/games/webhook',
   'GET /api/get-intro-text', // ימות המשיח קוראת לזה עם ApiPhone — נתיב ציבורי
   'POST /api/get-intro-text',
+  'GET /api/get-archetype/by-phone', // ימות (שלוחה 1) — מחזיר מספר סוג האישיות
+  'POST /api/get-archetype/by-phone',
 ]);
 const WEBHOOK_PATH = '/api/games/webhook';
 

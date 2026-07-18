@@ -224,6 +224,7 @@ export function matchPersonality(profile, personalities, options = {}) {
     return {
       id: p.id,
       name: p.name,
+      number: p.number ?? null,
       description: p.description,
       profile: p.profile,
       distance: round(d, 2),

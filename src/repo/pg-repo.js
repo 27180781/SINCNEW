@@ -21,10 +21,12 @@ CREATE TABLE IF NOT EXISTS personalities (
   seq         BIGSERIAL,
   id          TEXT PRIMARY KEY,
   name        TEXT,
+  num         INT,
   description TEXT,
   profile     JSONB,
   generated   BOOLEAN DEFAULT false
 );
+ALTER TABLE personalities ADD COLUMN IF NOT EXISTS num INT;
 CREATE TABLE IF NOT EXISTS batches (
   id           TEXT PRIMARY KEY,
   name         TEXT,
@@ -49,7 +51,7 @@ function rowToQuestion(r) {
   return { id: r.id, order: r.ord, text: r.text, options: r.options || [] };
 }
 function rowToPersonality(r) {
-  return { id: r.id, name: r.name, description: r.description, profile: r.profile || {}, generated: !!r.generated };
+  return { id: r.id, name: r.name, number: r.num ?? null, description: r.description, profile: r.profile || {}, generated: !!r.generated };
 }
 function rowToBatch(r) {
   const createdAt = r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at;
@@ -140,7 +142,7 @@ export class PgRepo {
 
   // ---- סוגי אישיות ----
   async allPersonalities() {
-    const { rows } = await this.q('SELECT id, name, description, profile, generated FROM personalities ORDER BY seq ASC');
+    const { rows } = await this.q('SELECT id, name, num, description, profile, generated FROM personalities ORDER BY seq ASC');
     return rows.map(rowToPersonality);
   }
   async countPersonalities() {
@@ -157,7 +159,7 @@ export class PgRepo {
     const totalRes = await this.q(`SELECT COUNT(*)::int AS n FROM personalities ${where}`, params);
     const total = totalRes.rows[0].n;
 
-    let sql = `SELECT id, name, description, profile, generated FROM personalities ${where} ORDER BY seq ASC`;
+    let sql = `SELECT id, name, num, description, profile, generated FROM personalities ${where} ORDER BY seq ASC`;
     const qParams = [...params];
     if (limit !== 'all') {
       qParams.push(limit, offset);
@@ -170,20 +172,20 @@ export class PgRepo {
     return { total, offset, limit, items: rows.map(rowToPersonality) };
   }
   async getPersonality(id) {
-    const { rows } = await this.q('SELECT id, name, description, profile, generated FROM personalities WHERE id = $1', [id]);
+    const { rows } = await this.q('SELECT id, name, num, description, profile, generated FROM personalities WHERE id = $1', [id]);
     return rows[0] ? rowToPersonality(rows[0]) : null;
   }
   async addPersonality(p) {
     await this.q(
-      'INSERT INTO personalities (id, name, description, profile, generated) VALUES ($1, $2, $3, $4::jsonb, $5)',
-      [p.id, p.name, p.description, J(p.profile), !!p.generated]
+      'INSERT INTO personalities (id, name, num, description, profile, generated) VALUES ($1, $2, $3, $4, $5::jsonb, $6)',
+      [p.id, p.name, p.number ?? null, p.description, J(p.profile), !!p.generated]
     );
     return p;
   }
   async updatePersonality(id, p) {
     const { rowCount } = await this.q(
-      'UPDATE personalities SET name = $2, description = $3, profile = $4::jsonb, generated = $5 WHERE id = $1',
-      [id, p.name, p.description, J(p.profile), !!p.generated]
+      'UPDATE personalities SET name = $2, num = $3, description = $4, profile = $5::jsonb, generated = $6 WHERE id = $1',
+      [id, p.name, p.number ?? null, p.description, J(p.profile), !!p.generated]
     );
     return rowCount ? p : null;
   }
@@ -329,13 +331,13 @@ export class PgRepo {
       const values = [];
       const params = [];
       slice.forEach((p, k) => {
-        const b = k * 5;
-        values.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}::jsonb, $${b + 5})`);
-        params.push(p.id, p.name, p.description, J(p.profile), !!p.generated);
+        const b = k * 6;
+        values.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}::jsonb, $${b + 6})`);
+        params.push(p.id, p.name, p.number ?? null, p.description, J(p.profile), !!p.generated);
       });
       if (values.length) {
         await client.query(
-          `INSERT INTO personalities (id, name, description, profile, generated) VALUES ${values.join(', ')}`,
+          `INSERT INTO personalities (id, name, num, description, profile, generated) VALUES ${values.join(', ')}`,
           params
         );
       }

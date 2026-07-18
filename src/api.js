@@ -130,6 +130,7 @@ function sanitizePersonality(input, keys) {
   return {
     id: input.id || newId('type'),
     name: String(input.name || 'ללא שם').trim(),
+    number: toNumOrNull(input.number), // מספר קובץ השמע בימות
     description: String(input.description || '').trim(),
     profile,
     generated: !!input.generated,
@@ -264,6 +265,10 @@ export function createRouter(repo) {
     const keys = elementKeysFrom(await repo.getSettings());
     const p = sanitizePersonality(body, keys);
     if (!p.name) return err('שם סוג האישיות חסר');
+    if (p.number == null) {
+      const all = await repo.allPersonalities();
+      p.number = 1 + all.reduce((m, x) => Math.max(m, x.number || 0), 0);
+    }
     await repo.addPersonality(p);
     return ok(p, 201);
   });
@@ -290,6 +295,13 @@ export function createRouter(repo) {
     if (!Array.isArray(list)) return err('נדרש מערך סוגי אישיות');
     const mode = (Array.isArray(body) ? 'append' : body.mode) || 'append';
     const clean = list.map((p) => sanitizePersonality(p, keys));
+    // הקצאת מספרים סידוריים לחסרים (ממשיך מהמקסימום הקיים במצב append)
+    let next = 1;
+    if (mode !== 'replace') {
+      const all = await repo.allPersonalities();
+      next = 1 + all.reduce((m, x) => Math.max(m, x.number || 0), 0);
+    }
+    for (const p of clean) if (p.number == null) p.number = next++;
     if (mode === 'replace') await repo.setPersonalities(clean);
     else await repo.appendPersonalities(clean);
     return ok({ imported: clean.length, total: await repo.countPersonalities() }, 201);
@@ -490,6 +502,7 @@ export function createRouter(repo) {
   add('GET', '/api/integration', async () => ok({
     webhookPath: '/api/games/webhook',
     introTextPath: '/api/get-intro-text',
+    archetypePath: '/api/get-archetype/by-phone',
     method: 'POST',
     tokenRequired: !!process.env.GAME_TOKEN,
     notifyTokenSet: !!process.env.YEMOT_TOKEN, // האם YEMOT_TOKEN הוגדר בשרת
@@ -539,9 +552,10 @@ export function createRouter(repo) {
   add('POST', '/api/intro-preview', async ({ body }) => {
     const settings = await repo.getSettings();
     const keys = elementKeysFrom(settings);
-    const r = buildDemoResult(body?.name, body?.phone, body?.percentages, keys, [], {});
+    const personalities = await repo.allPersonalities();
+    const r = buildDemoResult(body?.name, body?.phone, body?.percentages, keys, personalities, matchOptions(settings));
     const text = buildIntroText(r, settings.elements || []);
-    return ok({ text, yemot: toYemotRead(text) });
+    return ok({ text, yemot: toYemotIdList(text), match: r.match });
   });
 
   // שמירת תוצאת דמו למספר טלפון — כדי להתקשר לימות ולשמוע את התוצאה בפועל
@@ -569,8 +583,31 @@ export function createRouter(repo) {
       },
     };
     await repo.addBatch(batch);
-    return ok({ ok: true, phone, batchId: batch.id, text, yemot: toYemotRead(text) });
+    return ok({ ok: true, phone, batchId: batch.id, text, yemot: toYemotIdList(text), match: r.match });
   });
+
+  // ---- מספר סוג האישיות לפי טלפון (לשלוחה 1 בימות — מחזיר רק מספר) ----
+  // ימות תשמיע את קובץ השמע ששמו המספר. ברירת מחדל: מספר גולמי;
+  // ?format=file מחזיר id_list_message=f-<מספר> (השמעת הקובץ ישירות).
+  async function archetypeByPhoneHandler({ query, body }) {
+    const phoneRaw = query.ApiPhone ?? query.apiPhone ?? query.phone ?? body?.ApiPhone ?? body?.phone;
+    const fmt = query.format ?? body?.format;
+    const notFound = query.notFound ?? body?.notFound ?? '0'; // מספר ברירת מחדל אם אין תוצאה
+
+    const batches = await repo.allBatches();
+    const result = findLatestParticipantByPhone(batches, phoneRaw);
+    let number = result?.match?.number;
+    if (number == null && result?.match?.id) {
+      // גיבוי לתוצאות ישנות: איתור המספר לפי מזהה סוג האישיות
+      const all = await repo.allPersonalities();
+      number = all.find((p) => p.id === result.match.id)?.number;
+    }
+    const value = number != null ? String(number) : String(notFound);
+    if (fmt === 'file' || fmt === 'idlist') return textResp(`id_list_message=f-${value}`);
+    return textResp(value); // ברירת מחדל: רק המספר
+  }
+  add('GET', '/api/get-archetype/by-phone', archetypeByPhoneHandler);
+  add('POST', '/api/get-archetype/by-phone', archetypeByPhoneHandler);
 
   // ---- סטטיסטיקה ללוח הבקרה ----
   add('GET', '/api/stats', async () => {

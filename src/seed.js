@@ -230,6 +230,8 @@ export function generatePersonalities(step = 10) {
       }
     }
   }
+  // מספר סידורי לכל סוג (לקבצי השמע בימות) — ניתן לעריכה בפאנל
+  list.forEach((p, i) => { p.number = i + 1; });
   return list;
 }
 
