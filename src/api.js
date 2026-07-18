@@ -514,12 +514,13 @@ export function createRouter(repo) {
     const phoneRaw = query.ApiPhone ?? query.apiPhone ?? query.phone ?? body?.ApiPhone ?? body?.phone;
     const settings = await repo.getSettings();
     const elements = settings.elements || [];
-    // פורמט התשובה: ברירת מחדל read=t- ; 'idlist' = id_list_message ; 'text' = גולמי (לבדיקה)
+    // פורמט התשובה: ברירת מחדל id_list_message (משמיע וממשיך ל-api_end_goto);
+    // 'read' = read=t- ; 'text' = טקסט גולמי (לבדיקה בדפדפן)
     const fmt = query.format ?? body?.format;
     const respond = (t) => {
       if (fmt === 'text') return textResp(t);
-      if (fmt === 'idlist' || fmt === 'id_list' || fmt === 'id_list_message') return textResp(toYemotIdList(t));
-      return textResp(toYemotRead(t));
+      if (fmt === 'read') return textResp(toYemotRead(t));
+      return textResp(toYemotIdList(t));
     };
 
     if (!normalizePhone(phoneRaw)) return respond('שלום, לא זוהה מספר טלפון תקין');

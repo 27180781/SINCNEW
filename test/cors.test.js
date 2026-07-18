@@ -71,5 +71,11 @@ test('CORS: כל תשובות ה-webhook נושאות כותרות Access-Contro
   });
   assert.equal(intro.status, 200, 'form-urlencoded POST -> 200 (לא 400)');
   const introBody = await intro.text();
-  assert.match(introBody, /^read=t-/, 'תשובת ברירת המחדל בפורמט read=t-');
+  assert.match(introBody, /^id_list_message=/, 'ברירת מחדל: id_list_message');
+
+  // ?format=read מחזיר read=t-
+  const introRead = await fetch(`${BASE}/api/get-intro-text?format=read`, {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'ApiPhone=0501234567',
+  });
+  assert.match(await introRead.text(), /^read=t-/, '?format=read -> read=t-');
 });
