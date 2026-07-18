@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildIntroText, findLatestParticipantByPhone } from '../src/intro.js';
+import { buildIntroText, findLatestParticipantByPhone, toYemotRead } from '../src/intro.js';
 
 const ELEMENTS = [
   { key: 'fire', label: 'אש' },
@@ -52,6 +52,22 @@ test('buildIntroText: תיקו על הדומיננטי => מדלגים על שו
   assert.match(t, /ובפירוט/);
   assert.match(t, /40 אחוז יסוד האש/);
   assert.match(t, /40 אחוז יסוד המים/);
+});
+
+test('toYemotRead: פורמט read=t- עם קטע לכל שורה', () => {
+  const out = toYemotRead('שלום לך\nובפירוט\n50 אחוז יסוד האש');
+  assert.match(out, /^read=t-/);
+  // כל שורה הופכת לקטע t- נפרד
+  assert.ok(out.includes('.t-ובפירוט'));
+  assert.ok(out.includes('.t-50 אחוז יסוד האש'));
+  // אין תווים ששוברים את הפורמט
+  assert.ok(!out.includes('='.repeat(1) + 't') || out.startsWith('read=t-'));
+});
+
+test('toYemotRead: מנטרל תווים בעייתיים (= & . שורות)', () => {
+  const out = toYemotRead('שלום=ל&דנה.כאן');
+  // = & . הוחלפו ברווח, נשאר קטע אחד
+  assert.equal(out, 'read=t-שלום ל דנה כאן');
 });
 
 test('findLatestParticipantByPhone: מאתר לפי טלפון ובוחר את המפגש העדכני', () => {

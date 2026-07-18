@@ -59,3 +59,27 @@ export function buildIntroText(result, elements) {
   lines.push('מיד תועבר לשמוע בפירוט על התכונות שמאפיינות אותך');
   return lines.join('\n');
 }
+
+// ניקוי קטע טקסט לפורמט read של ימות:
+// '.' מפריד בין קטעי הקראה, '=' ו-'&' שוברים את פירוק התשובה — מנטרלים אותם.
+function sanitizeYemotSegment(s) {
+  return String(s)
+    .replace(/[=&]/g, ' ')
+    .replace(/\./g, ' ')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * ממיר טקסט (עם שורות) לפורמט הקראה של ימות המשיח:
+ *   read=t-<שורה1>.t-<שורה2>...
+ * כל שורה הופכת לקטע הקראה נפרד (t-), עם הפסקה טבעית ביניהם.
+ */
+export function toYemotRead(text) {
+  const parts = String(text)
+    .split('\n')
+    .map(sanitizeYemotSegment)
+    .filter((s) => s.length > 0);
+  return 'read=t-' + (parts.length ? parts.join('.t-') : ' ');
+}

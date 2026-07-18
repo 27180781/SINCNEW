@@ -9,7 +9,7 @@ import { validateGamePayload, gamePayloadToParticipants } from './game.js';
 import { parseXlsx } from './xlsx.js';
 import { parseCsv, rowsToQuestions } from './mapping.js';
 import { collectPhones, sendTzintuk, normalizePhone } from './tzintuk.js';
-import { findLatestParticipantByPhone, buildIntroText } from './intro.js';
+import { findLatestParticipantByPhone, buildIntroText, toYemotRead } from './intro.js';
 
 const ok = (body, status = 200) => ({ status, body });
 const err = (message, status = 400) => ({ status, body: { error: message } });
@@ -480,14 +480,18 @@ export function createRouter(repo) {
     const phoneRaw = query.ApiPhone ?? query.apiPhone ?? query.phone ?? body?.ApiPhone ?? body?.phone;
     const settings = await repo.getSettings();
     const elements = settings.elements || [];
-    if (!normalizePhone(phoneRaw)) return textResp('שלום, לא זוהה מספר טלפון תקין.');
+    // ברירת מחדל: פורמט read=t- של ימות. ?format=text מחזיר טקסט גולמי (לתצוגה/בדיקה).
+    const rawMode = query.format === 'text' || query.raw != null;
+    const respond = (t) => textResp(rawMode ? t : toYemotRead(t));
+
+    if (!normalizePhone(phoneRaw)) return respond('שלום, לא זוהה מספר טלפון תקין');
 
     const batches = await repo.allBatches();
     const result = findLatestParticipantByPhone(batches, phoneRaw);
     if (!result || !(result.answered > 0)) {
-      return textResp('שלום, לא נמצאו עבורך תוצאות במערכת. ייתכן שטרם השתתפת במשחק.');
+      return respond('שלום, לא נמצאו עבורך תוצאות במערכת ייתכן שטרם השתתפת במשחק');
     }
-    return textResp(buildIntroText(result, elements));
+    return respond(buildIntroText(result, elements));
   }
   add('GET', '/api/get-intro-text', introTextHandler);
   add('POST', '/api/get-intro-text', introTextHandler);
