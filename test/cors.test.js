@@ -62,4 +62,14 @@ test('CORS: כל תשובות ה-webhook נושאות כותרות Access-Contro
   });
   assert.equal(slash.status, 204);
   assert.equal(slash.headers.get('access-control-allow-origin'), '*');
+
+  // 5) get-intro-text מקבל POST בפורמט form-urlencoded (כפי שימות המשיח שולחת)
+  const intro = await fetch(`${BASE}/api/get-intro-text`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'ApiPhone=0501234567&ApiExtension=1',
+  });
+  assert.equal(intro.status, 200, 'form-urlencoded POST -> 200 (לא 400)');
+  const introBody = await intro.text();
+  assert.match(introBody, /^read=t-/, 'תשובת ברירת המחדל בפורמט read=t-');
 });

@@ -83,3 +83,16 @@ export function toYemotRead(text) {
     .filter((s) => s.length > 0);
   return 'read=t-' + (parts.length ? parts.join('.t-') : ' ');
 }
+
+/**
+ * פורמט חלופי של ימות: id_list_message — משמיע את הטקסט וממשיך (מתאים ל-api_end_goto).
+ * כל שורה = פריט נפרד. JSON.stringify מטפל בבריחת תווים.
+ */
+export function toYemotIdList(text) {
+  const items = String(text)
+    .split('\n')
+    .map((s) => s.replace(/[\r\n]+/g, ' ').trim())
+    .filter((s) => s.length > 0)
+    .map((s) => ({ type: 'text', data: s }));
+  return 'id_list_message=' + JSON.stringify(items.length ? items : [{ type: 'text', data: ' ' }]);
+}

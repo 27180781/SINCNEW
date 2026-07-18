@@ -66,10 +66,19 @@ function parseBody(req) {
     req.on('end', () => {
       const raw = Buffer.concat(chunks).toString('utf8').trim();
       if (!raw) return resolve({});
+      const ct = String(req.headers['content-type'] || '').toLowerCase();
+      // ימות המשיח שולחת POST בפורמט form-urlencoded (ApiPhone=...&...)
+      if (ct.includes('application/x-www-form-urlencoded')) {
+        return resolve(Object.fromEntries(new URLSearchParams(raw)));
+      }
       try {
         resolve(JSON.parse(raw));
       } catch {
-        reject(new Error('JSON לא תקין'));
+        // גיבוי: אם זה נראה כמו form-urlencoded (יש '=' ואין '{') — ננתח ככה
+        if (raw.includes('=') && !raw.trimStart().startsWith('{') && !raw.trimStart().startsWith('[')) {
+          return resolve(Object.fromEntries(new URLSearchParams(raw)));
+        }
+        reject(new Error('גוף בקשה לא תקין (נדרש JSON או form-urlencoded)'));
       }
     });
     req.on('error', reject);

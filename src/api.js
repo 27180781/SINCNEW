@@ -9,7 +9,7 @@ import { validateGamePayload, gamePayloadToParticipants } from './game.js';
 import { parseXlsx } from './xlsx.js';
 import { parseCsv, rowsToQuestions } from './mapping.js';
 import { collectPhones, sendTzintuk, normalizePhone } from './tzintuk.js';
-import { findLatestParticipantByPhone, buildIntroText, toYemotRead } from './intro.js';
+import { findLatestParticipantByPhone, buildIntroText, toYemotRead, toYemotIdList } from './intro.js';
 
 const ok = (body, status = 200) => ({ status, body });
 const err = (message, status = 400) => ({ status, body: { error: message } });
@@ -510,12 +510,17 @@ export function createRouter(repo) {
 
   // ---- טקסט פתיח אישי להקראה (ימות המשיח קוראת עם ApiPhone) ----
   async function introTextHandler({ query, body }) {
+    // ימות שולחת POST בפורמט form-urlencoded — הפרמטרים מגיעים ב-body
     const phoneRaw = query.ApiPhone ?? query.apiPhone ?? query.phone ?? body?.ApiPhone ?? body?.phone;
     const settings = await repo.getSettings();
     const elements = settings.elements || [];
-    // ברירת מחדל: פורמט read=t- של ימות. ?format=text מחזיר טקסט גולמי (לתצוגה/בדיקה).
-    const rawMode = query.format === 'text' || query.raw != null;
-    const respond = (t) => textResp(rawMode ? t : toYemotRead(t));
+    // פורמט התשובה: ברירת מחדל read=t- ; 'idlist' = id_list_message ; 'text' = גולמי (לבדיקה)
+    const fmt = query.format ?? body?.format;
+    const respond = (t) => {
+      if (fmt === 'text') return textResp(t);
+      if (fmt === 'idlist' || fmt === 'id_list' || fmt === 'id_list_message') return textResp(toYemotIdList(t));
+      return textResp(toYemotRead(t));
+    };
 
     if (!normalizePhone(phoneRaw)) return respond('שלום, לא זוהה מספר טלפון תקין');
 
