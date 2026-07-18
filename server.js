@@ -131,7 +131,11 @@ const server = http.createServer(async (req, res) => {
   } catch {
     return sendJson(res, 400, { error: 'בקשה לא תקינה' });
   }
-  const pathname = url.pathname;
+  let pathname = url.pathname;
+  // נרמול לוכסן-סיום בודד בנתיבי API (למשל '/api/games/webhook/' -> '/api/games/webhook')
+  if (pathname.length > 5 && pathname.endsWith('/') && pathname.startsWith('/api/')) {
+    pathname = pathname.slice(0, -1);
+  }
 
   // API
   if (pathname.startsWith('/api/')) {
