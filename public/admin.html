@@ -104,6 +104,36 @@
           <button id="copyIntroUrlBtn">העתקה</button>
         </div>
       </div>
+
+      <div class="card" id="simulatorCard">
+        <h2 style="margin:0 0 6px">🎧 סימולטור שיחה — כך זה יישמע</h2>
+        <p><small>הזן נתוני דמו (או טען תוצאה קיימת לפי טלפון), וצפה + <strong>האזן</strong> לטקסט שהמתקשר ישמע.
+          ההקראה כאן היא בקול הדפדפן (לא של ימות) — רק להתרשמות.</small></p>
+        <div class="grid cols-2">
+          <div class="field"><label>שם (רשות — ריק = "שלום לך")</label><input id="simName" placeholder="למשל: ישראל" /></div>
+          <div class="field"><label>טעינת תוצאה קיימת לפי טלפון</label>
+            <div class="row"><input id="simPhone" placeholder="05XXXXXXXX" /><button id="simLoadPhone">טען</button></div>
+          </div>
+        </div>
+        <label>אחוזי יסודות (דמו) — נסה גם 25/25/25/25 לראות דילוג על הדומיננטי</label>
+        <div class="grid cols-4" id="simElements"></div>
+        <div class="row" style="margin-top:10px">
+          <button class="primary" id="simGenerate">צור תצוגה</button>
+          <button id="simSpeak">🔊 השמע (בדפדפן)</button>
+          <button id="simStop" class="ghost">⏹ עצור</button>
+          <div class="spacer"></div>
+          <button id="simSaveDemo">💾 שמור דמו למספר — כדי להתקשר</button>
+        </div>
+        <div id="simResult" style="display:none;margin-top:12px"></div>
+        <div class="muted-box" style="margin-top:12px">
+          <strong>🎙️ לשמוע בטלפון אמיתי מימות (3 שלבים):</strong>
+          <ol style="margin:6px 0 0;padding-inline-start:20px">
+            <li>הגדירו בימות שלוחת API שמצביעה על כתובת "טקסט פתיח" שלמעלה.</li>
+            <li>כאן: מלאו מספר טלפון + אחוזי דמו, ולחצו <strong>"שמור דמו למספר"</strong>.</li>
+            <li>התקשרו לימות והגיעו לשלוחה מאותו מספר — תשמעו בדיוק את התוצאה שהגדרתם.</li>
+          </ol>
+        </div>
+      </div>
       <div class="grid cols-2">
         <div class="card">
           <h2>קלט JSON של משתתפים</h2>

@@ -3,7 +3,7 @@
 //  כל ה-handlers אסינכרוניים ופועלים מול repo (Postgres או JSON, אותו ממשק).
 // ============================================================================
 
-import { scoreBatch, DEFAULT_ELEMENT_KEYS } from './scoring.js';
+import { scoreBatch, matchPersonality, roundTo100, DEFAULT_ELEMENT_KEYS } from './scoring.js';
 import { buildSeedData, generatePersonalities, defaultSettings, buildSampleQuestions, newId } from './seed.js';
 import { validateGamePayload, gamePayloadToParticipants } from './game.js';
 import { parseXlsx } from './xlsx.js';
@@ -82,6 +82,39 @@ function sanitizeNotify(input, fallback = {}) {
     callerId: String(src.callerId ?? '').slice(0, 40),
     tzintukTimeOut: Math.min(16, t),
     onlyAnswered: src.onlyAnswered !== false, // ברירת מחדל: true
+  };
+}
+
+// בונה תוצאת "דמו" מאחוזי יסודות שהוזנו ידנית (לסימולטור / לשמירה לפי טלפון)
+function buildDemoResult(name, phone, enteredPct, keys, personalities, matchOpts) {
+  const counts = {};
+  let total = 0;
+  for (const k of keys) {
+    const v = Math.max(0, Math.round(Number(enteredPct?.[k]) || 0));
+    counts[k] = v;
+    total += v;
+  }
+  const percentagesRaw = {};
+  for (const k of keys) percentagesRaw[k] = total > 0 ? (counts[k] / total) * 100 : 0;
+  const percentages = roundTo100(percentagesRaw, keys);
+  let dominant = null;
+  let best = -1;
+  for (const k of keys) if (percentagesRaw[k] > best) { best = percentagesRaw[k]; dominant = k; }
+  if (total === 0) dominant = null;
+  const m = matchPersonality(percentagesRaw, personalities || [], matchOpts || {});
+  return {
+    id: String(phone || ''),
+    name: name != null ? String(name) : '',
+    counts,
+    total,
+    answered: total > 0 ? total : 0,
+    questionCount: total,
+    percentages,
+    percentagesRaw,
+    dominant,
+    game: { number: String(phone || ''), score: 0, numAnswers: total, numCorrect: 0, groupId: null },
+    match: m.best,
+    topMatches: m.matches,
   };
 }
 
@@ -495,6 +528,43 @@ export function createRouter(repo) {
   }
   add('GET', '/api/get-intro-text', introTextHandler);
   add('POST', '/api/get-intro-text', introTextHandler);
+
+  // תצוגה מקדימה של טקסט הפתיח מנתוני דמו (לסימולטור בפאנל)
+  add('POST', '/api/intro-preview', async ({ body }) => {
+    const settings = await repo.getSettings();
+    const keys = elementKeysFrom(settings);
+    const r = buildDemoResult(body?.name, body?.phone, body?.percentages, keys, [], {});
+    const text = buildIntroText(r, settings.elements || []);
+    return ok({ text, yemot: toYemotRead(text) });
+  });
+
+  // שמירת תוצאת דמו למספר טלפון — כדי להתקשר לימות ולשמוע את התוצאה בפועל
+  add('POST', '/api/intro-demo', async ({ body }) => {
+    const phone = normalizePhone(body?.phone);
+    if (!phone) return err('מספר טלפון לא תקין');
+    const settings = await repo.getSettings();
+    const keys = elementKeysFrom(settings);
+    const personalities = await repo.allPersonalities();
+    const r = buildDemoResult(body?.name, phone, body?.percentages, keys, personalities, matchOptions(settings));
+    if (!(r.answered > 0)) return err('סכום אחוזי היסודות חייב להיות גדול מ-0');
+
+    const text = buildIntroText(r, settings.elements || []);
+    const batch = {
+      id: newId('batch'),
+      name: `🧪 דמו · ${phone}`,
+      createdAt: new Date().toISOString(),
+      source: 'demo',
+      participants: [{ id: phone, name: r.name, answers: {}, game: r.game }],
+      result: {
+        count: 1,
+        results: [r],
+        averages: r.percentages,
+        personalityTally: r.match ? { [r.match.id]: { name: r.match.name, count: 1 } } : {},
+      },
+    };
+    await repo.addBatch(batch);
+    return ok({ ok: true, phone, batchId: batch.id, text, yemot: toYemotRead(text) });
+  });
 
   // ---- סטטיסטיקה ללוח הבקרה ----
   add('GET', '/api/stats', async () => {

@@ -355,6 +355,90 @@ function copyInput(id) {
 document.getElementById('copyWebhookBtn').addEventListener('click', () => copyInput('webhookUrl'));
 document.getElementById('copyIntroUrlBtn').addEventListener('click', () => copyInput('introTextUrl'));
 
+// ---- סימולטור שיחה (תצוגה + הקראה בדפדפן) ----
+let simText = '';
+const SIM_DEFAULTS = { fire: 40, water: 30, air: 20, earth: 10 };
+
+function buildSimElements() {
+  const box = document.getElementById('simElements');
+  if (!box || box.childElementCount) return; // בונים פעם אחת
+  ELEMENT_ORDER.forEach((k) => {
+    box.appendChild(el('div', { class: 'field' }, [
+      el('label', { class: `el-text-${k}` }, `${elEmoji(k)} ${elLabel(k)}`),
+      el('input', { type: 'number', min: 0, max: 100, id: `sim_${k}`, value: SIM_DEFAULTS[k] ?? 25 }),
+    ]));
+  });
+}
+
+function renderSimResult(text, yemot) {
+  simText = text || '';
+  const box = document.getElementById('simResult');
+  box.style.display = 'block';
+  box.innerHTML = '';
+  box.appendChild(el('div', { class: 'muted-box', style: 'white-space:pre-wrap;line-height:1.8;font-size:1.02rem' }, text || '(אין טקסט)'));
+  if (yemot) {
+    const det = el('details', { style: 'margin-top:8px' });
+    det.appendChild(el('summary', { style: 'cursor:pointer;font-weight:700' }, 'פורמט read=t- (מה שנשלח לימות)'));
+    const pre = el('pre', { style: 'white-space:pre-wrap;background:#f8f9fc;padding:10px;border-radius:8px;font-size:.78rem;overflow:auto' });
+    pre.textContent = yemot;
+    det.appendChild(pre);
+    box.appendChild(det);
+  }
+}
+
+function simSpeak() {
+  if (!simText) return toast('צור תצוגה קודם', true);
+  if (!('speechSynthesis' in window)) return toast('הדפדפן לא תומך בהקראה', true);
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(simText);
+  u.lang = 'he-IL';
+  u.rate = 0.95;
+  const voices = window.speechSynthesis.getVoices();
+  const he = voices.find((v) => (v.lang || '').toLowerCase().startsWith('he'));
+  if (he) u.voice = he;
+  window.speechSynthesis.speak(u);
+}
+
+document.getElementById('simGenerate').addEventListener('click', async () => {
+  const name = document.getElementById('simName').value.trim();
+  const percentages = {};
+  ELEMENT_ORDER.forEach((k) => { percentages[k] = Number(document.getElementById(`sim_${k}`).value) || 0; });
+  try {
+    const r = await api.post('/api/intro-preview', { name, percentages });
+    renderSimResult(r.text, r.yemot);
+  } catch (e) { toast(e.message, true); }
+});
+
+document.getElementById('simLoadPhone').addEventListener('click', async () => {
+  const phone = document.getElementById('simPhone').value.trim();
+  if (!phone) return toast('הזן מספר טלפון', true);
+  const enc = encodeURIComponent(phone);
+  try {
+    const [text, yemot] = await Promise.all([
+      fetch(`/api/get-intro-text?ApiPhone=${enc}&format=text`).then((r) => r.text()),
+      fetch(`/api/get-intro-text?ApiPhone=${enc}`).then((r) => r.text()),
+    ]);
+    renderSimResult(text, yemot);
+  } catch (e) { toast(e.message, true); }
+});
+
+document.getElementById('simSaveDemo').addEventListener('click', async () => {
+  const phone = document.getElementById('simPhone').value.trim();
+  if (!phone) return toast('הזן מספר טלפון לשמירת הדמו', true);
+  const name = document.getElementById('simName').value.trim();
+  const percentages = {};
+  ELEMENT_ORDER.forEach((k) => { percentages[k] = Number(document.getElementById(`sim_${k}`).value) || 0; });
+  try {
+    const r = await api.post('/api/intro-demo', { phone, name, percentages });
+    renderSimResult(r.text, r.yemot);
+    toast(`נשמר! התקשר לימות עם ${r.phone} כדי לשמוע`);
+    loadBatches();
+  } catch (e) { toast(e.message, true); }
+});
+
+document.getElementById('simSpeak').addEventListener('click', simSpeak);
+document.getElementById('simStop').addEventListener('click', () => { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); });
+
 function exampleParticipants() {
   const qs = state.questions.length ? state.questions : [];
   const letters = ['A', 'B', 'C', 'D'];
@@ -691,7 +775,7 @@ const loaders = {
   mapping: loadMapping,
   inbox: loadInbox,
   personalities: () => loadPersonalities(),
-  participants: () => { renderFormatHelp(); loadIntegration(); loadBatches(); if (!state.questions.length) api.get('/api/questions').then((q) => { state.questions = q; }); },
+  participants: () => { renderFormatHelp(); loadIntegration(); buildSimElements(); loadBatches(); if (!state.questions.length) api.get('/api/questions').then((q) => { state.questions = q; }); },
   settings: loadSettings,
 };
 
