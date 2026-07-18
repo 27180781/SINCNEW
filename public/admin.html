@@ -171,6 +171,37 @@
         <button class="primary" id="saveSettingsBtn">שמירת הגדרות</button>
       </div>
       <div class="card">
+        <div class="row">
+          <h2 style="margin:0">📞 צינתוק אוטומטי (ימות המשיח)</h2>
+          <span class="badge" id="notifyTokenBadge" style="margin-inline-start:8px"></span>
+        </div>
+        <p><small>בסיום קליטת תוצאות משחק, המערכת תשלח צינתוק לכל המשתתפים שיש להם תוצאה מוכנה.
+          הטוקן של ימות מוגדר בשרת כמשתנה הסביבה <code>YEMOT_TOKEN</code> (לא נשמר במאגר).</small></p>
+        <div class="grid cols-2">
+          <div class="field">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" id="notifyEnabled" style="width:auto" /> הפעלת צינתוק אוטומטי
+            </label>
+          </div>
+          <div class="field">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" id="notifyOnlyAnswered" style="width:auto" /> רק למי שענה (לא למצטרפים בלי הצבעה)
+            </label>
+          </div>
+        </div>
+        <div class="grid cols-2">
+          <div class="field"><label>callerId — זיהוי יוצא (רשות)</label><input id="notifyCallerId" placeholder="ברירת מחדל: זיהוי המערכת" /></div>
+          <div class="field"><label>משך צינתוק (שניות, מקס' 16)</label><input id="notifyTimeout" type="number" min="1" max="16" /></div>
+        </div>
+        <button class="primary" id="saveNotifyBtn">שמירת הגדרות צינתוק</button>
+        <hr style="border:none;border-top:1px solid var(--line);margin:16px 0" />
+        <h3>בדיקה — שליחת צינתוק בודד</h3>
+        <div class="row">
+          <input id="notifyTestPhone" placeholder="05XXXXXXXX" style="max-width:200px" />
+          <button id="notifyTestBtn">שלח צינתוק בדיקה</button>
+        </div>
+      </div>
+      <div class="card">
         <h2>היסודות</h2>
         <div id="elementsEditor" class="grid cols-2"></div>
       </div>

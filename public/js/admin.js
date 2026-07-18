@@ -494,6 +494,16 @@ const INBOX_STATUS = {
   error: { color: '#b91c1c', label: '✕ שגיאה' },
 };
 
+function inboxNotifyText(n) {
+  if (!n.attempted) {
+    const reasons = { disabled: 'צינתוק כבוי בהגדרות', 'no-token': 'YEMOT_TOKEN לא הוגדר בשרת', 'no-valid-phones': 'אין מספרי טלפון תקינים לחיוג' };
+    return '📞 לא נשלח צינתוק — ' + (reasons[n.reason] || 'לא הופעל');
+  }
+  if (n.pending) return `📞 שולח צינתוק ל-${n.phones} מספרים… (רענן לעדכון)`;
+  if (n.ok) return `📞 ✓ צינתוק נשלח בהצלחה ל-${n.phones} מספרים`;
+  return `📞 ✕ צינתוק נכשל (${n.phones ?? '?'} מספרים): ${n.message || n.error || n.status || 'שגיאה'}`;
+}
+
 function renderInboxEntry(e) {
   const card = el('div', { class: 'card' });
   const st = INBOX_STATUS[e.status] || { color: '#888', label: e.status };
@@ -506,6 +516,7 @@ function renderInboxEntry(e) {
   if (e.error) card.appendChild(el('div', { class: 'muted-box', style: 'color:#b91c1c;margin-top:8px' }, 'שגיאה: ' + e.error));
   if (e.mappedMissing) card.appendChild(el('div', { class: 'muted-box', style: 'color:#b8860b;margin-top:8px' },
     'שים לב: אין מיפוי מוגדר במערכת — התשובות לא מופו ליסודות. העלה קובץ מיפוי בטאב "מיפוי יסודות".'));
+  if (e.notify) card.appendChild(el('div', { class: 'muted-box', style: 'margin-top:8px' }, inboxNotifyText(e.notify)));
 
   if (e.results && e.results.length) {
     const t = el('table');
@@ -583,6 +594,20 @@ async function loadSettings() {
   document.getElementById('setMetric').value = s.matching?.metric || 'euclidean';
   document.getElementById('setTopN').value = s.matching?.topN || 3;
 
+  // הגדרות צינתוק
+  const n = s.notify || {};
+  document.getElementById('notifyEnabled').checked = !!n.enabled;
+  document.getElementById('notifyOnlyAnswered').checked = n.onlyAnswered !== false;
+  document.getElementById('notifyCallerId').value = n.callerId || '';
+  document.getElementById('notifyTimeout').value = n.tzintukTimeOut || 9;
+  try {
+    const info = await api.get('/api/integration');
+    const badge = document.getElementById('notifyTokenBadge');
+    badge.textContent = info.notifyTokenSet ? '🔑 YEMOT_TOKEN מוגדר' : '⚠ YEMOT_TOKEN חסר בשרת';
+    badge.style.background = info.notifyTokenSet ? 'var(--earth)' : '#b91c1c';
+    badge.style.color = '#fff';
+  } catch { /* לא קריטי */ }
+
   const ed = document.getElementById('elementsEditor');
   ed.innerHTML = '';
   (s.elements || []).forEach((e, i) => {
@@ -614,6 +639,29 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
     state.settings = await api.put('/api/settings', payload);
     setElements(state.settings.elements);
     toast('ההגדרות נשמרו');
+  } catch (e) { toast(e.message, true); }
+});
+
+document.getElementById('saveNotifyBtn').addEventListener('click', async () => {
+  const notify = {
+    enabled: document.getElementById('notifyEnabled').checked,
+    onlyAnswered: document.getElementById('notifyOnlyAnswered').checked,
+    callerId: document.getElementById('notifyCallerId').value.trim(),
+    tzintukTimeOut: Number(document.getElementById('notifyTimeout').value) || 9,
+  };
+  try {
+    state.settings = await api.put('/api/settings', { notify });
+    toast('הגדרות הצינתוק נשמרו');
+  } catch (e) { toast(e.message, true); }
+});
+
+document.getElementById('notifyTestBtn').addEventListener('click', async () => {
+  const phone = document.getElementById('notifyTestPhone').value.trim();
+  if (!phone) return toast('הזן מספר טלפון', true);
+  try {
+    const r = await api.post('/api/notify/test', { phone });
+    if (r.ok) toast('צינתוק בדיקה נשלח בהצלחה');
+    else toast('נכשל: ' + (r.message || r.error || r.status || 'שגיאה'), true);
   } catch (e) { toast(e.message, true); }
 });
 

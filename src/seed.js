@@ -19,6 +19,8 @@ export function defaultSettings() {
     subtitle: 'אש · מים · רוח · עפר',
     elements: ELEMENTS.map((e) => ({ ...e })),
     matching: { metric: 'euclidean', topN: 3 },
+    // צינתוק אוטומטי (ימות המשיח) בסיום קליטת תוצאות משחק — כבוי כברירת מחדל
+    notify: { enabled: false, callerId: '', tzintukTimeOut: 9, onlyAnswered: true },
   };
 }
 

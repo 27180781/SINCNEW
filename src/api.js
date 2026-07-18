@@ -8,6 +8,7 @@ import { buildSeedData, generatePersonalities, defaultSettings, buildSampleQuest
 import { validateGamePayload, gamePayloadToParticipants } from './game.js';
 import { parseXlsx } from './xlsx.js';
 import { parseCsv, rowsToQuestions } from './mapping.js';
+import { collectPhones, sendTzintuk, normalizePhone } from './tzintuk.js';
 
 const ok = (body, status = 200) => ({ status, body });
 const err = (message, status = 400) => ({ status, body: { error: message } });
@@ -69,6 +70,19 @@ function sanitizeElements(elements, fallback = []) {
   }));
 }
 
+// ולידציה של הגדרות הצינתוק
+function sanitizeNotify(input, fallback = {}) {
+  const src = input || fallback || {};
+  let t = Number(src.tzintukTimeOut);
+  if (!Number.isFinite(t) || t <= 0) t = 9;
+  return {
+    enabled: !!src.enabled,
+    callerId: String(src.callerId ?? '').slice(0, 40),
+    tzintukTimeOut: Math.min(16, t),
+    onlyAnswered: src.onlyAnswered !== false, // ברירת מחדל: true
+  };
+}
+
 // ולידציה של סוג אישיות
 function sanitizePersonality(input, keys) {
   const profile = {};
@@ -105,6 +119,7 @@ export function createRouter(repo) {
       subtitle: body.subtitle != null ? String(body.subtitle).slice(0, 200) : cur.subtitle,
       elements: Array.isArray(body.elements) ? sanitizeElements(body.elements, cur.elements) : cur.elements,
       matching: { ...cur.matching, ...(body.matching || {}) },
+      notify: body.notify ? sanitizeNotify(body.notify, cur.notify) : (cur.notify || sanitizeNotify(null)),
     };
     await repo.saveSettings(next);
     return ok(next);
@@ -391,7 +406,28 @@ export function createRouter(repo) {
       counts: r.counts, percentages: r.percentages, dominant: r.dominant,
       match: r.match ? { name: r.match.name, similarity: r.match.similarity } : null,
     }));
-    return finish(ok({ ok: true, stored: true, batchId: batch.id, participants: result.count }));
+
+    // ---- צינתוק למשתתפים עם תוצאה (fire-and-forget — לא מעכב את התשובה למשחק) ----
+    const notifyCfg = settings.notify || {};
+    if (!notifyCfg.enabled) {
+      entry.notify = { attempted: false, reason: 'disabled' };
+    } else if (!process.env.YEMOT_TOKEN) {
+      entry.notify = { attempted: false, reason: 'no-token' };
+    } else {
+      const phones = collectPhones(result.results, { onlyAnswered: notifyCfg.onlyAnswered });
+      if (!phones.length) {
+        entry.notify = { attempted: false, phones: 0, reason: 'no-valid-phones' };
+      } else {
+        entry.notify = { attempted: true, phones: phones.length, pending: true };
+        sendTzintuk(phones, {
+          token: process.env.YEMOT_TOKEN, callerId: notifyCfg.callerId, timeout: notifyCfg.tzintukTimeOut,
+        })
+          .then((r) => { entry.notify = { attempted: true, ...r }; })
+          .catch((e) => { entry.notify = { attempted: true, phones: phones.length, ok: false, error: String(e?.message || e) }; });
+      }
+    }
+
+    return finish(ok({ ok: true, stored: true, batchId: batch.id, participants: result.count, notify: entry.notify }));
   }
 
   add('POST', '/api/games/webhook', async ({ body, query }) => {
@@ -420,7 +456,21 @@ export function createRouter(repo) {
     webhookPath: '/api/games/webhook',
     method: 'POST',
     tokenRequired: !!process.env.GAME_TOKEN,
+    notifyTokenSet: !!process.env.YEMOT_TOKEN, // האם YEMOT_TOKEN הוגדר בשרת
   }));
+
+  // בדיקת צינתוק — שולח צינתוק בודד למספר שנבחר
+  add('POST', '/api/notify/test', async ({ body }) => {
+    const phone = normalizePhone(body?.phone);
+    if (!phone) return err('מספר טלפון לא תקין');
+    if (!process.env.YEMOT_TOKEN) return err('YEMOT_TOKEN לא הוגדר בשרת', 400);
+    const settings = await repo.getSettings();
+    const cfg = settings.notify || {};
+    const r = await sendTzintuk([phone], {
+      token: process.env.YEMOT_TOKEN, callerId: cfg.callerId, timeout: cfg.tzintukTimeOut,
+    });
+    return ok(r);
+  });
 
   // ---- סטטיסטיקה ללוח הבקרה ----
   add('GET', '/api/stats', async () => {
