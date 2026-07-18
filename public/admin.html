@@ -22,6 +22,7 @@
       <button data-tab="mapping">מיפוי יסודות</button>
       <button data-tab="personalities">סוגי אישיות</button>
       <button data-tab="participants">שיוך משתתפים</button>
+      <button data-tab="inbox">קלט Webhook</button>
       <button data-tab="settings">הגדרות</button>
     </div>
 
@@ -126,6 +127,27 @@
         <div id="scoreAverages"></div>
         <div id="scoreTable"></div>
       </div>
+    </section>
+
+    <!-- קלט Webhook -->
+    <section class="tab-panel" id="tab-inbox">
+      <div class="card">
+        <div class="row">
+          <h2 style="margin:0">קלט Webhook — מה שהמשחק שולח</h2>
+          <div class="spacer"></div>
+          <button class="primary" id="refreshInboxBtn">רענון</button>
+          <button class="danger" id="clearInboxBtn">ניקוי</button>
+        </div>
+        <p><small>שלח תוצאות משחק לכתובת הבאה — כאן יופיע ה-JSON הגולמי <strong>בדיוק כפי שהגיע</strong>,
+          ואיך הוא מתפרש למיפוי (יסודות + התאמת אישיות לכל משתתף). נשמרות עד 25 קליטות אחרונות
+          (בזיכרון — מתאפס בפריסה מחדש). הרשימה מתרעננת אוטומטית כל 5 שניות.</small></p>
+        <div class="row">
+          <input id="inboxWebhookUrl" readonly style="font-family:monospace;font-size:.8rem" />
+          <button id="copyInboxUrlBtn">העתקה</button>
+          <span class="badge" id="inboxTokenBadge"></span>
+        </div>
+      </div>
+      <div id="inboxList"></div>
     </section>
 
     <!-- הגדרות -->

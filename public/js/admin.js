@@ -23,6 +23,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.querySelectorAll('#tabs button').forEach((x) => x.classList.toggle('active', x === b));
   const tab = b.dataset.tab;
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === `tab-${tab}`));
+  clearTimeout(inboxTimer); // עצירת רענון-הקלט האוטומטי במעבר טאב
   loaders[tab]?.();
 });
 
@@ -485,6 +486,94 @@ async function viewBatch(id) {
 }
 
 // ============================================================
+//  קלט Webhook — צפייה בקלט הגולמי שהמשחק שולח + הפירוש
+// ============================================================
+const INBOX_STATUS = {
+  stored: { color: 'var(--earth)', label: '✓ נקלט ומופה' },
+  duplicate: { color: '#b8860b', label: '↺ כפילות (כבר נקלט)' },
+  error: { color: '#b91c1c', label: '✕ שגיאה' },
+};
+
+function renderInboxEntry(e) {
+  const card = el('div', { class: 'card' });
+  const st = INBOX_STATUS[e.status] || { color: '#888', label: e.status };
+  card.appendChild(el('div', { class: 'row' }, [
+    el('span', { class: 'badge', style: `background:${st.color};color:#fff` }, st.label),
+    el('strong', { style: 'margin-inline-start:6px' }, e.gameName || '(ללא שם משחק)'),
+    el('small', { style: 'margin-inline-start:8px' },
+      `${e.participantCount ?? '?'} משתתפים · ${e.method} · ${new Date(e.receivedAt).toLocaleString('he-IL')}`),
+  ]));
+  if (e.error) card.appendChild(el('div', { class: 'muted-box', style: 'color:#b91c1c;margin-top:8px' }, 'שגיאה: ' + e.error));
+  if (e.mappedMissing) card.appendChild(el('div', { class: 'muted-box', style: 'color:#b8860b;margin-top:8px' },
+    'שים לב: אין מיפוי מוגדר במערכת — התשובות לא מופו ליסודות. העלה קובץ מיפוי בטאב "מיפוי יסודות".'));
+
+  if (e.results && e.results.length) {
+    const t = el('table');
+    t.innerHTML = `<thead><tr><th>משתתף</th>${ELEMENT_ORDER.map((k) => `<th>${escapeHtml(elEmoji(k))}</th>`).join('')}<th>דומיננטי</th><th>סוג אישיות</th></tr></thead>`;
+    const tb = el('tbody');
+    e.results.forEach((r) => {
+      tb.appendChild(el('tr', {}, [
+        el('td', {}, el('strong', {}, r.name || String(r.number))),
+        ...ELEMENT_ORDER.map((k) => el('td', {}, `${r.percentages?.[k] ?? 0}%`)),
+        el('td', {}, r.dominant ? el('span', { class: `el-chip el-${r.dominant}` }, elLabel(r.dominant)) : '—'),
+        el('td', {}, r.match ? `${r.match.name} (${r.match.similarity}%)` : '—'),
+      ]));
+    });
+    t.appendChild(tb);
+    card.appendChild(el('h4', { style: 'margin:12px 0 6px' }, 'פירוש — איך מופה ליסודות:'));
+    card.appendChild(t);
+  }
+
+  const details = el('details', { style: 'margin-top:10px' });
+  const summary = el('summary', { style: 'cursor:pointer;font-weight:700' }, 'הצג JSON גולמי כפי שהתקבל');
+  details.appendChild(summary);
+  const pre = el('pre', { style: 'white-space:pre-wrap;background:#f8f9fc;padding:12px;border-radius:8px;font-size:.78rem;max-height:340px;overflow:auto' });
+  pre.textContent = JSON.stringify(e.raw, null, 2);
+  details.appendChild(pre);
+  card.appendChild(details);
+  return card;
+}
+
+let inboxTimer = null;
+async function loadInbox() {
+  try {
+    const info = await api.get('/api/integration');
+    document.getElementById('inboxWebhookUrl').value = window.location.origin + info.webhookPath;
+    document.getElementById('inboxTokenBadge').textContent = info.tokenRequired ? '🔒 נדרש token ב-URL' : 'ללא טוקן';
+  } catch { /* לא קריטי */ }
+
+  try {
+    const data = await api.get('/api/games/inbox');
+    const box = document.getElementById('inboxList');
+    box.innerHTML = '';
+    if (!data.items.length) {
+      box.appendChild(el('div', { class: 'empty' }, 'עדיין לא התקבל קלט. שלח תוצאת משחק לכתובת שלמעלה — זה יופיע כאן.'));
+    } else {
+      data.items.forEach((entry) => box.appendChild(renderInboxEntry(entry)));
+    }
+  } catch (e) { toast(e.message, true); }
+
+  // רענון אוטומטי כל 5 שניות כל עוד הטאב פעיל
+  clearTimeout(inboxTimer);
+  if (document.getElementById('tab-inbox').classList.contains('active')) {
+    inboxTimer = setTimeout(loadInbox, 5000);
+  }
+}
+
+document.getElementById('refreshInboxBtn').addEventListener('click', loadInbox);
+document.getElementById('clearInboxBtn').addEventListener('click', async () => {
+  if (!confirm('לנקות את תיבת הקלט?')) return;
+  try { await api.del('/api/games/inbox'); toast('נוקה'); loadInbox(); } catch (e) { toast(e.message, true); }
+});
+document.getElementById('copyInboxUrlBtn').addEventListener('click', () => {
+  const inp = document.getElementById('inboxWebhookUrl');
+  inp.select();
+  const done = () => toast('הכתובת הועתקה');
+  if (navigator.clipboard) navigator.clipboard.writeText(inp.value).then(done).catch(() => { document.execCommand('copy'); done(); });
+  else { document.execCommand('copy'); done(); }
+});
+
+// ============================================================
 //  הגדרות
 // ============================================================
 async function loadSettings() {
@@ -549,6 +638,7 @@ document.getElementById('resetAllBtn').addEventListener('click', async () => {
 const loaders = {
   dashboard: loadDashboard,
   mapping: loadMapping,
+  inbox: loadInbox,
   personalities: () => loadPersonalities(),
   participants: () => { renderFormatHelp(); loadIntegration(); loadBatches(); if (!state.questions.length) api.get('/api/questions').then((q) => { state.questions = q; }); },
   settings: loadSettings,

@@ -316,16 +316,44 @@ export function createRouter(repo) {
     return !token || query.token === token;
   };
 
-  async function handleGameSubmission(raw) {
+  // "תיבת קלט" בזיכרון — שומרת את הקלט הגולמי האחרון שהתקבל (עד 25), כולל כשלים,
+  // כדי לאפשר לראות בדיוק באיזה פורמט המשחק שולח ואיך זה מתפרש למיפוי.
+  const INBOX_MAX = 25;
+  const inbox = [];
+  const recordInbox = (entry) => {
+    inbox.unshift(entry);
+    if (inbox.length > INBOX_MAX) inbox.length = INBOX_MAX;
+  };
+
+  async function handleGameSubmission(raw, method) {
+    const entry = {
+      id: newId('in'),
+      receivedAt: new Date().toISOString(),
+      method: method || 'POST',
+      status: 'error',
+      error: null,
+      raw, // הקלט הגולמי כפי שהתקבל
+    };
+    const finish = (resp) => { recordInbox(entry); return resp; };
+
     const v = validateGamePayload(raw);
-    if (!v.ok) return err(v.error, 400);
+    if (!v.ok) {
+      entry.error = v.error;
+      return finish(err(v.error, 400));
+    }
     const game = v.payload;
+    entry.gameId = game.gameId;
+    entry.gameName = game.gameName;
+    entry.sentAt = game.sentAt;
+    entry.participantCount = game.participants.length;
 
     // מניעת כפילויות לפי gameId + sentAt
     if (game.gameId) {
       const existing = await repo.findGameBatch(game.gameId, game.sentAt);
       if (existing) {
-        return ok({ ok: true, duplicate: true, batchId: existing.id, participants: existing.result?.count || 0 });
+        entry.status = 'duplicate';
+        entry.batchId = existing.id;
+        return finish(ok({ ok: true, duplicate: true, batchId: existing.id, participants: existing.result?.count || 0 }));
       }
     }
 
@@ -354,12 +382,21 @@ export function createRouter(repo) {
       result,
     };
     await repo.addBatch(batch);
-    return ok({ ok: true, stored: true, batchId: batch.id, participants: result.count });
+    entry.status = 'stored';
+    entry.batchId = batch.id;
+    entry.mappedMissing = questions.length === 0; // אין מיפוי מוגדר -> לא ימופה כלום
+    // פירוש: איך כל משתתף מופה ליסודות (לתצוגה במסך הבדיקה)
+    entry.results = result.results.map((r) => ({
+      name: r.name, number: r.game?.number || r.id, answered: r.answered,
+      counts: r.counts, percentages: r.percentages, dominant: r.dominant,
+      match: r.match ? { name: r.match.name, similarity: r.match.similarity } : null,
+    }));
+    return finish(ok({ ok: true, stored: true, batchId: batch.id, participants: result.count }));
   }
 
   add('POST', '/api/games/webhook', async ({ body, query }) => {
     if (!checkGameToken(query)) return err('טוקן שגוי', 401);
-    return handleGameSubmission(body);
+    return handleGameSubmission(body, 'POST');
   });
 
   add('GET', '/api/games/webhook', async ({ query }) => {
@@ -371,8 +408,12 @@ export function createRouter(repo) {
     } catch {
       return err('payload אינו JSON תקין', 400);
     }
-    return handleGameSubmission(parsed);
+    return handleGameSubmission(parsed, 'GET');
   });
+
+  // תיבת הקלט של ה-webhook (לצפייה בקלט הגולמי + הפירוש) — מוגן ADMIN_TOKEN
+  add('GET', '/api/games/inbox', async () => ok({ count: inbox.length, items: inbox }));
+  add('DELETE', '/api/games/inbox', async () => { inbox.length = 0; return ok({ cleared: true }); });
 
   // פרטי האינטגרציה לפאנל הניהול (כתובת ה-webhook, האם נדרש טוקן)
   add('GET', '/api/integration', async () => ok({
