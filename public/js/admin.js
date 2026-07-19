@@ -328,6 +328,16 @@ document.getElementById('genPersBtn').addEventListener('click', () => {
   openModal(form);
 });
 
+document.getElementById('clearPersBtn').addEventListener('click', async () => {
+  const total = document.getElementById('persCount').textContent;
+  if (!confirm(`למחוק את כל ${total} סוגי האישיות הקיימים?\n\nפעולה זו אינה הפיכה. (טיפ: אפשר גם פשוט להעלות קובץ במצב "החלפת המאגר הקיים".)`)) return;
+  try {
+    await api.del('/api/personalities');
+    toast('כל סוגי האישיות נמחקו');
+    state.persPage = 0; loadPersonalities();
+  } catch (e) { toast(e.message, true); }
+});
+
 document.getElementById('importPersFileBtn').addEventListener('click', () => {
   const form = el('div');
   form.appendChild(el('h2', {}, 'העלאת סוגי אישיות מקובץ Excel/CSV'));
