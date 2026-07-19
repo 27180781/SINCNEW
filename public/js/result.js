@@ -77,7 +77,7 @@ function render(d) {
     mc.appendChild(el('h2', { style: 'font-size:1.5rem;margin:.2em 0' }, d.match.name || '—'));
     if (d.match.number != null) mc.appendChild(el('span', { class: 'badge' }, `מספר ${d.match.number}`));
     if (d.match.similarity != null) mc.appendChild(el('div', { style: 'margin-top:6px' }, el('small', {}, `${d.match.similarity}% דמיון`)));
-    if (d.match.description) mc.appendChild(el('p', { style: 'margin-top:10px' }, d.match.description));
+    if (d.match.description) mc.appendChild(el('div', { class: 'desc-text', style: 'margin-top:14px;text-align:start;white-space:pre-line;line-height:1.8' }, d.match.description));
     resultView.appendChild(mc);
   }
 

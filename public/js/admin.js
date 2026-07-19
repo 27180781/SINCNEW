@@ -328,6 +328,51 @@ document.getElementById('genPersBtn').addEventListener('click', () => {
   openModal(form);
 });
 
+document.getElementById('importPersFileBtn').addEventListener('click', () => {
+  const form = el('div');
+  form.appendChild(el('h2', {}, 'העלאת סוגי אישיות מקובץ Excel/CSV'));
+  form.appendChild(el('div', { class: 'muted-box' }, [
+    el('div', {}, 'מבנה העמודות (עם שורת כותרת):'),
+    el('div', { style: 'margin-top:6px;font-weight:700' }, 'מספר אישיות · שם (אופציונלי) · אחוז אש · אחוז מים · אחוז רוח · אחוז עפר · תיאור'),
+    el('div', { style: 'margin-top:6px' }, 'התיאור המלא יוצג בעמוד האישי של כל מי שהאישיות הזו הותאמה לו.'),
+  ]));
+  const file = el('input', { type: 'file', accept: '.xlsx,.xls,.csv', style: 'padding:8px' });
+  const mode = el('select');
+  mode.appendChild(el('option', { value: 'replace' }, 'החלפת המאגר הקיים'));
+  mode.appendChild(el('option', { value: 'append' }, 'הוספה למאגר הקיים'));
+  form.appendChild(el('div', { class: 'field', style: 'margin-top:12px' }, [el('label', {}, 'קובץ (xlsx / csv)'), file]));
+  form.appendChild(el('div', { class: 'field' }, [el('label', {}, 'אופן'), mode]));
+  const status = el('div', { style: 'margin:8px 0;color:var(--muted)' });
+  form.appendChild(status);
+  form.appendChild(el('div', { class: 'row' }, [
+    el('button', { class: 'primary', onclick: async () => {
+      const f = file.files && file.files[0];
+      if (!f) return toast('בחר קובץ', true);
+      status.textContent = 'מעלה ומעבד…';
+      try {
+        const dataBase64 = await fileToBase64(f);
+        const r = await api.post('/api/personalities/import-file', { dataBase64, mode: mode.value });
+        closeModal();
+        toast(`יובאו ${r.imported} סוגי אישיות`);
+        if (r.warnings && r.warnings.length) console.warn('אזהרות ייבוא:', r.warnings);
+        state.persPage = 0; loadPersonalities();
+      } catch (e) { status.textContent = ''; toast(e.message, true); }
+    } }, 'ייבוא'),
+    el('button', { onclick: closeModal }, 'ביטול'),
+  ]));
+  openModal(form);
+});
+
+// קריאת קובץ ל-base64 (ללא הקידומת data:)
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => { const s = String(reader.result); resolve(s.slice(s.indexOf(',') + 1)); };
+    reader.onerror = () => reject(new Error('כשל בקריאת הקובץ'));
+    reader.readAsDataURL(file);
+  });
+}
+
 document.getElementById('bulkPersBtn').addEventListener('click', () => {
   const form = el('div');
   form.appendChild(el('h2', {}, 'ייבוא סוגי אישיות (JSON)'));

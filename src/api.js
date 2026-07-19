@@ -8,6 +8,7 @@ import { buildSeedData, generatePersonalities, defaultSettings, buildSampleQuest
 import { validateGamePayload, gamePayloadToParticipants } from './game.js';
 import { parseXlsx } from './xlsx.js';
 import { parseCsv, rowsToQuestions } from './mapping.js';
+import { parsePersonalitiesInput } from './personalities-import.js';
 import { collectPhones, sendTzintuk, normalizePhone } from './tzintuk.js';
 import { findLatestParticipantByPhone, buildIntroText, toYemotRead, toYemotIdList } from './intro.js';
 import { assignPersonalCodes, findByPersonalCode, findByPhone, computeInsights } from './insights.js';
@@ -323,6 +324,37 @@ export function createRouter(repo) {
     }
     await repo.setPersonalities(all);
     return ok({ renumbered: all.length, mode });
+  });
+
+  // ייבוא סוגי אישיות מקובץ Excel/CSV (מספר · שם · אחוזי יסודות · תיאור מלא)
+  add('POST', '/api/personalities/import-file', async ({ body }) => {
+    const settings = await repo.getSettings();
+    const keys = elementKeysFrom(settings);
+    const keyToLabel = {};
+    for (const el of settings.elements || []) keyToLabel[el.key] = el.label;
+
+    let parsed;
+    try {
+      parsed = parsePersonalitiesInput(body, parseXlsx, { keys, keyToLabel });
+    } catch (e) {
+      return err('כשל בקריאת הקובץ: ' + (e?.message || e));
+    }
+    const { personalities, warnings } = parsed;
+    if (!personalities.length) return err('לא נמצאו סוגי אישיות תקינים בקובץ. ' + warnings.join(' '));
+
+    const clean = personalities.map((p) => sanitizePersonality(p, keys));
+    // השלמת מספרים סידוריים לחסרים (ממשיך מהמקסימום הקיים במצב append)
+    const mode = body.mode === 'append' ? 'append' : 'replace';
+    let next = 1;
+    if (mode !== 'replace') {
+      const all = await repo.allPersonalities();
+      next = 1 + all.reduce((m, x) => Math.max(m, x.number || 0), 0);
+    }
+    for (const p of clean) if (p.number == null) p.number = next++;
+
+    if (mode === 'replace') await repo.setPersonalities(clean);
+    else await repo.appendPersonalities(clean);
+    return ok({ imported: clean.length, total: await repo.countPersonalities(), mode, warnings }, 201);
   });
 
   // חידוש המאגר האלגוריתמי
