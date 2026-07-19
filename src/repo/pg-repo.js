@@ -14,9 +14,11 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE TABLE IF NOT EXISTS questions (
   id      TEXT PRIMARY KEY,
   ord     INT,
+  que_id  INT,
   text    TEXT,
   options JSONB
 );
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS que_id INT;
 CREATE TABLE IF NOT EXISTS personalities (
   seq         BIGSERIAL,
   id          TEXT PRIMARY KEY,
@@ -48,7 +50,7 @@ CREATE INDEX IF NOT EXISTS batches_game_key ON batches (game_id, sent_at);
 const J = (obj) => JSON.stringify(obj ?? null);
 
 function rowToQuestion(r) {
-  return { id: r.id, order: r.ord, text: r.text, options: r.options || [] };
+  return { id: r.id, order: r.ord, queId: r.que_id ?? null, text: r.text, options: r.options || [] };
 }
 function rowToPersonality(r) {
   return { id: r.id, name: r.name, number: r.num ?? null, description: r.description, profile: r.profile || {}, generated: !!r.generated };
@@ -97,23 +99,23 @@ export class PgRepo {
 
   // ---- שאלות ----
   async listQuestions() {
-    const { rows } = await this.q('SELECT id, ord, text, options FROM questions ORDER BY ord ASC, id ASC');
+    const { rows } = await this.q('SELECT id, ord, que_id, text, options FROM questions ORDER BY ord ASC, id ASC');
     return rows.map(rowToQuestion);
   }
   async getQuestion(id) {
-    const { rows } = await this.q('SELECT id, ord, text, options FROM questions WHERE id = $1', [id]);
+    const { rows } = await this.q('SELECT id, ord, que_id, text, options FROM questions WHERE id = $1', [id]);
     return rows[0] ? rowToQuestion(rows[0]) : null;
   }
   async addQuestion(q) {
-    await this.q('INSERT INTO questions (id, ord, text, options) VALUES ($1, $2, $3, $4::jsonb)', [
-      q.id, q.order, q.text, J(q.options),
+    await this.q('INSERT INTO questions (id, ord, que_id, text, options) VALUES ($1, $2, $3, $4, $5::jsonb)', [
+      q.id, q.order, q.queId ?? null, q.text, J(q.options),
     ]);
     return q;
   }
   async updateQuestion(id, q) {
     const { rowCount } = await this.q(
-      'UPDATE questions SET ord = $2, text = $3, options = $4::jsonb WHERE id = $1',
-      [id, q.order, q.text, J(q.options)]
+      'UPDATE questions SET ord = $2, que_id = $3, text = $4, options = $5::jsonb WHERE id = $1',
+      [id, q.order, q.queId ?? null, q.text, J(q.options)]
     );
     return rowCount ? q : null;
   }
@@ -126,8 +128,8 @@ export class PgRepo {
     try {
       await client.query('DELETE FROM questions');
       for (const q of list) {
-        await client.query('INSERT INTO questions (id, ord, text, options) VALUES ($1, $2, $3, $4::jsonb)', [
-          q.id, q.order, q.text, J(q.options),
+        await client.query('INSERT INTO questions (id, ord, que_id, text, options) VALUES ($1, $2, $3, $4, $5::jsonb)', [
+          q.id, q.order, q.queId ?? null, q.text, J(q.options),
         ]);
       }
       await client.query('COMMIT');
@@ -294,8 +296,8 @@ export class PgRepo {
       await client.query('DELETE FROM settings');
       await client.query('INSERT INTO settings (id, data) VALUES (1, $1::jsonb)', [J(data.settings)]);
       for (const q of data.questions || []) {
-        await client.query('INSERT INTO questions (id, ord, text, options) VALUES ($1, $2, $3, $4::jsonb)', [
-          q.id, q.order, q.text, J(q.options),
+        await client.query('INSERT INTO questions (id, ord, que_id, text, options) VALUES ($1, $2, $3, $4, $5::jsonb)', [
+          q.id, q.order, q.queId ?? null, q.text, J(q.options),
         ]);
       }
       await this._insertPersonalities(client, data.personalities || []);

@@ -39,17 +39,30 @@ async function checkRepo(repo) {
   assert.ok(settings.title, 'seed: יש כותרת');
   assert.equal(settings.elements.length, 4, 'seed: 4 יסודות');
 
-  // שאלות — CRUD
-  const q = { id: 'qtest', order: 99, text: 'שאלת בדיקה', options: [{ id: 'o1', text: 'א', element: 'fire', weight: 1 }] };
+  // שאלות — CRUD (כולל queId — מספר השאלה במערכת המשחק)
+  const q = { id: 'qtest', order: 99, queId: 42, text: 'שאלת בדיקה', options: [{ id: 'o1', answerId: 1, text: 'א', element: 'fire', weight: 1 }] };
   await repo.addQuestion(q);
   const got = await repo.getQuestion('qtest');
   assert.equal(got.text, 'שאלת בדיקה');
+  assert.equal(got.queId, 42, 'queId נשמר ב-addQuestion');
   assert.equal(got.options[0].element, 'fire');
-  await repo.updateQuestion('qtest', { ...q, text: 'עודכן' });
-  assert.equal((await repo.getQuestion('qtest')).text, 'עודכן');
+  await repo.updateQuestion('qtest', { ...q, queId: 43, text: 'עודכן' });
+  const upd = await repo.getQuestion('qtest');
+  assert.equal(upd.text, 'עודכן');
+  assert.equal(upd.queId, 43, 'queId נשמר ב-updateQuestion');
   assert.equal(await repo.deleteQuestion('qtest'), true);
   assert.equal(await repo.getQuestion('qtest'), null);
   assert.equal(await repo.deleteQuestion('nope'), false);
+
+  // setQuestions שומר את queId (התרחיש שנשבר: המספר "נעלם" אחרי שמירה ב-Postgres)
+  await repo.setQuestions([
+    { id: 'm1', order: 1, queId: 7, text: 'שאלה 7', options: [{ id: 'm1o1', answerId: 1, element: 'water', weight: 1 }] },
+    { id: 'm2', order: 2, queId: 8, text: 'שאלה 8', options: [{ id: 'm2o1', answerId: 1, element: 'fire', weight: 1 }] },
+  ]);
+  const mapped = await repo.listQuestions();
+  assert.deepEqual(mapped.map((x) => x.queId), [7, 8], 'setQuestions שומר queId לכל שאלה');
+  // החזרת השאלות המקוריות (12) כדי לא לשבש בדיקות המשך
+  await repo.setQuestions((await import('../src/seed.js')).buildSampleQuestions());
 
   // סוגי אישיות — עימוד וחיפוש
   const page = await repo.listPersonalities({ offset: 0, limit: 10 });
