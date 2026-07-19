@@ -677,6 +677,16 @@ function inboxNotifyText(n) {
   return `📞 ✕ צינתוק נכשל (${n.phones ?? '?'} מספרים): ${n.message || n.error || n.status || 'שגיאה'}`;
 }
 
+function inboxMasaLinkText(m) {
+  if (!m.attempted) {
+    const reasons = { disabled: 'MasaLink כבוי בהגדרות', 'no-credentials': 'חסרים Username/Token', 'no-email': 'אין מייל מפעיל במטען', 'no-link': 'אין מזהה משחק / כתובת בסיס לקישור' };
+    return '🔗 לא נשלח MasaLink — ' + (reasons[m.reason] || 'לא הופעל');
+  }
+  if (m.pending) return `🔗 שולח MasaLink ל-${m.email}… (רענן לעדכון)`;
+  if (m.ok) return `🔗 ✓ MasaLink נשלח ל-${m.email} · קישור: ${m.link || ''}`;
+  return `🔗 ✕ MasaLink נכשל (${m.email || '?'}): ${m.error || m.status || 'שגיאה'}`;
+}
+
 function renderInboxEntry(e) {
   const card = el('div', { class: 'card' });
   const st = INBOX_STATUS[e.status] || { color: '#888', label: e.status };
@@ -697,6 +707,7 @@ function renderInboxEntry(e) {
   if (e.mappedMissing) card.appendChild(el('div', { class: 'muted-box', style: 'color:#b8860b;margin-top:8px' },
     'שים לב: אין מיפוי מוגדר במערכת — התשובות לא מופו ליסודות. העלה קובץ מיפוי בטאב "מיפוי יסודות".'));
   if (e.notify) card.appendChild(el('div', { class: 'muted-box', style: 'margin-top:8px' }, inboxNotifyText(e.notify)));
+  if (e.masaLink) card.appendChild(el('div', { class: 'muted-box', style: 'margin-top:8px' }, inboxMasaLinkText(e.masaLink)));
 
   if (e.results && e.results.length) {
     const t = el('table');
@@ -780,12 +791,27 @@ async function loadSettings() {
   document.getElementById('notifyOnlyAnswered').checked = n.onlyAnswered !== false;
   document.getElementById('notifyCallerId').value = n.callerId || '';
   document.getElementById('notifyTimeout').value = n.tzintukTimeOut || 9;
+  // הגדרות MasaLink (Inforu)
+  const ml = s.masaLink || {};
+  document.getElementById('mlEnabled').checked = !!ml.enabled;
+  document.getElementById('mlUsername').value = ml.username || '';
+  document.getElementById('mlToken').value = ml.token || '';
+  document.getElementById('mlEventName').value = ml.apiEventName || 'MASALINK';
+  document.getElementById('mlLinkParam').value = ml.linkParam || 'Text27';
+  document.getElementById('mlResultsBaseUrl').value = ml.resultsBaseUrl || '';
+  document.getElementById('mlBaseUrl').value = ml.baseUrl || '';
+
   try {
     const info = await api.get('/api/integration');
     const badge = document.getElementById('notifyTokenBadge');
     badge.textContent = info.notifyTokenSet ? '🔑 YEMOT_TOKEN מוגדר' : '⚠ YEMOT_TOKEN חסר בשרת';
     badge.style.background = info.notifyTokenSet ? 'var(--earth)' : '#b91c1c';
     badge.style.color = '#fff';
+    const mb = document.getElementById('masaLinkBadge');
+    const mlInfo = info.masaLink || {};
+    mb.textContent = !mlInfo.enabled ? 'כבוי' : (mlInfo.credentialsSet ? '🔑 מוגדר ופעיל' : '⚠ חסרים Username/Token');
+    mb.style.background = !mlInfo.enabled ? '#9ca3af' : (mlInfo.credentialsSet ? 'var(--earth)' : '#b91c1c');
+    mb.style.color = '#fff';
   } catch { /* לא קריטי */ }
 
   const ed = document.getElementById('elementsEditor');
@@ -842,6 +868,42 @@ document.getElementById('notifyTestBtn').addEventListener('click', async () => {
     const r = await api.post('/api/notify/test', { phone });
     if (r.ok) toast('צינתוק בדיקה נשלח בהצלחה');
     else toast('נכשל: ' + (r.message || r.error || r.status || 'שגיאה'), true);
+  } catch (e) { toast(e.message, true); }
+});
+
+document.getElementById('saveMasaLinkBtn').addEventListener('click', async () => {
+  const masaLink = {
+    enabled: document.getElementById('mlEnabled').checked,
+    username: document.getElementById('mlUsername').value.trim(),
+    token: document.getElementById('mlToken').value.trim(),
+    apiEventName: document.getElementById('mlEventName').value.trim() || 'MASALINK',
+    linkParam: document.getElementById('mlLinkParam').value.trim() || 'Text27',
+    resultsBaseUrl: document.getElementById('mlResultsBaseUrl').value.trim(),
+    baseUrl: document.getElementById('mlBaseUrl').value.trim() || undefined,
+  };
+  try {
+    state.settings = await api.put('/api/settings', { masaLink });
+    toast('הגדרות MasaLink נשמרו');
+    loadSettings();
+  } catch (e) { toast(e.message, true); }
+});
+
+document.getElementById('mlTestBtn').addEventListener('click', async () => {
+  const email = document.getElementById('mlTestEmail').value.trim();
+  const gameId = document.getElementById('mlTestGameId').value.trim();
+  const box = document.getElementById('mlTestResult');
+  box.innerHTML = '';
+  if (!email) return toast('הזן מייל לבדיקה', true);
+  try {
+    const r = await api.post('/api/masalink/test', { email, gameId });
+    const okMsg = r.ok ? '✓ נשלח בהצלחה' : '✕ נכשל';
+    box.appendChild(el('div', { class: 'muted-box' }, [
+      el('div', {}, `${okMsg} (סטטוס ${r.status ?? '?'}${r.statusId != null ? `, StatusId ${r.statusId}` : ''})`),
+      r.link ? el('div', {}, [el('strong', {}, 'קישור שנשלח: '), el('a', { href: r.link, target: '_blank' }, r.link)]) : null,
+      r.error ? el('div', { style: 'color:#b91c1c' }, r.error) : null,
+      r.body ? el('small', {}, String(r.body).slice(0, 200)) : null,
+    ]));
+    if (r.ok) toast('MasaLink בדיקה נשלח'); else toast('MasaLink נכשל', true);
   } catch (e) { toast(e.message, true); }
 });
 

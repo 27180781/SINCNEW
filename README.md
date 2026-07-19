@@ -166,6 +166,24 @@ GET  /api/games/webhook?payload=<JSON מקודד ב-URL-encoding>       (חלו�
 ברקע (fire-and-forget) כדי לא לעכב את התשובה למשחק, וסטטוס השליחה מוצג בטאב "קלט Webhook".
 מפעילים ומגדירים (callerId, משך צינתוק, למי לשלוח) בטאב **הגדרות → צינתוק**, שם גם כפתור בדיקה.
 
+### MasaLink — שליחת מייל למפעיל עם קישור לתוצאות (Inforu)
+בסיום קליטת תוצאות (אחרי הפילוח והצינתוק), אם מופעל בהגדרות, המערכת מפעילה **אוטומציה ב-Inforu**
+בבקשת `GET` — עם **מייל מפעיל המשחק** (`ownerEmail`) ו**קישור ישיר לעמוד תוצאות המפגש**
+(`/session/<מזהה-המשחק>` — המזהה כבר משורשר לקישור):
+
+```
+GET https://capi.inforu.co.il/api/Automation/TriggerParameters
+      ?Username=<...>&Token=<...>&ApiEventName=MASALINK
+      &Email=<ownerEmail>&Text27=<https://.../session/<gameId>>
+```
+
+* מגדירים בטאב **הגדרות → MasaLink**: `Username`, `Token`, `ApiEventName` (ברירת מחדל `MASALINK`),
+  פרמטר הקישור (ברירת מחדל `Text27`), וכתובת בסיס לקישור (ריק = נגזר מכתובת הבקשה).
+* לחלופין אפשר להזין את הסודות כמשתני סביבה: `INFORU_USERNAME`, `INFORU_TOKEN`, `INFORU_EVENT`
+  (גוברים רק אם השדה בהגדרות ריק).
+* השליחה fire-and-forget (לא מעכבת את התשובה למשחק); הסטטוס מוצג בטאב "קלט Webhook"
+  (הטוקן מוסתר). כפתור **בדיקה** שולח הפעלה בודדת למייל שנבחר.
+
 ### טקסט פתיח אישי לשיחה נכנסת (ימות המשיח)
 כשהמתקשר חוזר לימות אחרי הצינתוק, שלוחת API (`type=api`, `api_url_post=yes`) קוראת ל-`/api/get-intro-text`
 עם `ApiPhone`. השרת מנתח גם POST בפורמט form-urlencoded (כפי שימות שולחת) ומחזיר את הטקסט.
@@ -260,7 +278,7 @@ GET  /api/games/webhook?payload=<JSON מקודד ב-URL-encoding>       (חלו�
 | **סוגי אישיות** | חיפוש, עימוד, עריכה, הוספה, **העלאת Excel/CSV** (מספר · שם · אחוזים · תיאור מלא), ייבוא JSON, חידוש מאגר אוטומטי, מספור סידורי 1..N |
 | **שיוך משתתפים** | הזנת JSON, שקלול, שמירת מפגש, הורדת תוצאות, צפייה במפגשים שמורים + קישור ציבורי לסשן |
 | **קלט Webhook** | צפייה בקלט הגולמי שהמשחק שולח (כולל כשלים) + הפירוש למיפוי, כתובת ה-webhook, רענון אוטומטי |
-| **הגדרות** | כותרות, מדד מרחק, מספר התאמות, עריכת היסודות (שם/צבע/אימוג'י), ייצוא/איפוס |
+| **הגדרות** | כותרות, מדד מרחק, מספר התאמות, עריכת היסודות, צינתוק (ימות), MasaLink (Inforu), ייצוא/איפוס |
 
 ---
 
@@ -284,6 +302,7 @@ GET  /api/games/webhook?payload=<JSON מקודד ב-URL-encoding>       (חלו�
 | GET/DELETE | `/api/games/inbox` | הקלט הגולמי האחרון שהתקבל (25 אחרונים, בזיכרון) |
 | GET | `/api/integration` | פרטי ה-webhook לפאנל |
 | POST | `/api/notify/test` | שליחת צינתוק בדיקה למספר בודד |
+| POST | `/api/masalink/test` | בדיקת MasaLink — הפעלת אוטומציה ב-Inforu למייל שנבחר |
 | GET/POST | `/api/get-intro-text` | טקסט פתיח אישי להקראה (ימות המשיח, פרמטר `ApiPhone`) |
 | GET/POST | `/api/get-archetype/by-phone` | מספר סוג האישיות לפי `ApiPhone` (שלוחה 1 — מספר גולמי) |
 | POST | `/api/intro-preview` | תצוגה מקדימה של הטקסט מנתוני דמו (סימולטור) |
@@ -306,6 +325,7 @@ src/
   mapping.js           המרת טבלת מיפוי (Excel/CSV) לשאלות
   personalities-import.js  ייבוא סוגי אישיות מ-Excel/CSV (מספר · שם · אחוזים · תיאור)
   tzintuk.js           שליחת צינתוק דרך ימות המשיח (call2all)
+  masalink.js          הפעלת אוטומציה ב-Inforu (מייל למפעיל עם קישור לתוצאות)
   intro.js             טקסט פתיח אישי להקראה (get-intro-text)
   insights.js          תובנות אישיות + קודים אישיים + איתור לפי טלפון/קוד
   api.js               הגדרת ה-endpoints (מול repo, אסינכרוני)
@@ -327,6 +347,7 @@ test/
   mapping.test.js      בדיקות ייבוא מיפוי Excel/CSV (כולל הקובץ האמיתי)
   personalities-import.test.js  בדיקות ייבוא סוגי אישיות מ-Excel/CSV
   insights.test.js     בדיקות תובנות אישיות + קודים אישיים
+  masalink.test.js     בדיקות שליחת MasaLink (Inforu)
   repo.test.js         בדיקת פאריטי: JsonRepo ו-PgRepo (דרך pg-mem)
 Dockerfile             דימוי לפריסה (CapRover)
 captain-definition     הגדרת CapRover

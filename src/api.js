@@ -10,6 +10,7 @@ import { parseXlsx } from './xlsx.js';
 import { parseCsv, rowsToQuestions } from './mapping.js';
 import { parsePersonalitiesInput } from './personalities-import.js';
 import { collectPhones, sendTzintuk, normalizePhone } from './tzintuk.js';
+import { sendMasaLink } from './masalink.js';
 import { findLatestParticipantByPhone, buildIntroText, toYemotRead, toYemotIdList } from './intro.js';
 import { assignPersonalCodes, findByPersonalCode, findByPhone, computeInsights } from './insights.js';
 
@@ -87,6 +88,39 @@ function sanitizeNotify(input, fallback = {}) {
   };
 }
 
+// ולידציה של הגדרות MasaLink (Inforu)
+function sanitizeMasaLink(input, fallback = {}) {
+  const src = input || fallback || {};
+  const str = (v, def = '', max = 400) => (v != null ? String(v) : def).slice(0, max);
+  return {
+    enabled: !!src.enabled,
+    baseUrl: str(src.baseUrl, fallback.baseUrl || 'https://capi.inforu.co.il/api/Automation/TriggerParameters'),
+    username: str(src.username, fallback.username || '', 100),
+    token: str(src.token, fallback.token || '', 200),
+    apiEventName: str(src.apiEventName, fallback.apiEventName || 'MASALINK', 100),
+    linkParam: str(src.linkParam, fallback.linkParam || 'Text27', 40) || 'Text27',
+    resultsBaseUrl: str(src.resultsBaseUrl, fallback.resultsBaseUrl || '', 300).replace(/\/+$/, ''),
+  };
+}
+
+// גזירת כתובת הבסיס הציבורית מבקשת ה-webhook (מאחורי פרוקסי כמו CapRover)
+function originFromReq(req) {
+  if (!req) return '';
+  const h = req.headers || {};
+  const host = h['x-forwarded-host'] || h.host;
+  if (!host) return '';
+  const proto = String(h['x-forwarded-proto'] || '').split(',')[0].trim()
+    || (/^(localhost|127\.|\[::1\])/.test(host) ? 'http' : 'https');
+  return `${proto}://${host}`;
+}
+
+// בונה את הקישור הישיר לעמוד תוצאות המפגש (עם מזהה המשחק משורשר)
+function buildResultsLink(base, gameId) {
+  const b = String(base || '').replace(/\/+$/, '');
+  if (!b || !gameId) return '';
+  return `${b}/session/${encodeURIComponent(gameId)}`;
+}
+
 // בונה תוצאת "דמו" מאחוזי יסודות שהוזנו ידנית (לסימולטור / לשמירה לפי טלפון)
 function buildDemoResult(name, phone, enteredPct, keys, personalities, matchOpts) {
   const counts = {};
@@ -158,6 +192,7 @@ export function createRouter(repo) {
       elements: Array.isArray(body.elements) ? sanitizeElements(body.elements, cur.elements) : cur.elements,
       matching: { ...cur.matching, ...(body.matching || {}) },
       notify: body.notify ? sanitizeNotify(body.notify, cur.notify) : (cur.notify || sanitizeNotify(null)),
+      masaLink: body.masaLink ? sanitizeMasaLink(body.masaLink, cur.masaLink) : (cur.masaLink || sanitizeMasaLink(null)),
     };
     await repo.saveSettings(next);
     return ok(next);
@@ -437,7 +472,7 @@ export function createRouter(repo) {
     if (inbox.length > INBOX_MAX) inbox.length = INBOX_MAX;
   };
 
-  async function handleGameSubmission(raw, method) {
+  async function handleGameSubmission(raw, method, origin) {
     const entry = {
       id: newId('in'),
       receivedAt: new Date().toISOString(),
@@ -533,16 +568,42 @@ export function createRouter(repo) {
       }
     }
 
+    // ---- MasaLink: הפעלת אוטומציה ב-Inforu עם מייל המפעיל + קישור לעמוד התוצאות ----
+    // (fire-and-forget — לא מעכב את התשובה למשחק)
+    const ml = settings.masaLink || {};
+    const mlUsername = ml.username || process.env.INFORU_USERNAME || '';
+    const mlToken = ml.token || process.env.INFORU_TOKEN || '';
+    const link = buildResultsLink(ml.resultsBaseUrl || origin, game.gameId);
+    if (!ml.enabled) {
+      entry.masaLink = { attempted: false, reason: 'disabled' };
+    } else if (!mlUsername || !mlToken) {
+      entry.masaLink = { attempted: false, reason: 'no-credentials' };
+    } else if (!game.email) {
+      entry.masaLink = { attempted: false, reason: 'no-email' };
+    } else if (!link) {
+      entry.masaLink = { attempted: false, reason: 'no-link' }; // אין מזהה משחק / כתובת בסיס
+    } else {
+      entry.masaLink = { attempted: true, email: game.email, link, pending: true };
+      sendMasaLink({
+        baseUrl: ml.baseUrl, username: mlUsername, token: mlToken,
+        apiEventName: ml.apiEventName || process.env.INFORU_EVENT, linkParam: ml.linkParam,
+        email: game.email, link,
+      })
+        .then((r) => { entry.masaLink = { attempted: true, ...r }; })
+        .catch((e) => { entry.masaLink = { attempted: true, email: game.email, link, ok: false, error: String(e?.message || e) }; });
+    }
+
     return finish(ok({ ok: true, stored: true, batchId: batch.id, participants: result.count,
-      email: batch.email, cloudinaryFolder: batch.cloudinaryFolder, notify: entry.notify }));
+      email: batch.email, cloudinaryFolder: batch.cloudinaryFolder, resultsLink: link || null,
+      notify: entry.notify, masaLink: entry.masaLink }));
   }
 
-  add('POST', '/api/games/webhook', async ({ body, query }) => {
+  add('POST', '/api/games/webhook', async ({ body, query, req }) => {
     if (!checkGameToken(query)) return err('טוקן שגוי', 401);
-    return handleGameSubmission(body, 'POST');
+    return handleGameSubmission(body, 'POST', originFromReq(req));
   });
 
-  add('GET', '/api/games/webhook', async ({ query }) => {
+  add('GET', '/api/games/webhook', async ({ query, req }) => {
     if (!checkGameToken(query)) return err('טוקן שגוי', 401);
     if (!query.payload) return err('חסר פרמטר payload', 400);
     let parsed;
@@ -551,7 +612,7 @@ export function createRouter(repo) {
     } catch {
       return err('payload אינו JSON תקין', 400);
     }
-    return handleGameSubmission(parsed, 'GET');
+    return handleGameSubmission(parsed, 'GET', originFromReq(req));
   });
 
   // תיבת הקלט של ה-webhook (לצפייה בקלט הגולמי + הפירוש) — מוגן ADMIN_TOKEN
@@ -559,14 +620,41 @@ export function createRouter(repo) {
   add('DELETE', '/api/games/inbox', async () => { inbox.length = 0; return ok({ cleared: true }); });
 
   // פרטי האינטגרציה לפאנל הניהול (כתובת ה-webhook, האם נדרש טוקן)
-  add('GET', '/api/integration', async () => ok({
-    webhookPath: '/api/games/webhook',
-    introTextPath: '/api/get-intro-text',
-    archetypePath: '/api/get-archetype/by-phone',
-    method: 'POST',
-    tokenRequired: !!process.env.GAME_TOKEN,
-    notifyTokenSet: !!process.env.YEMOT_TOKEN, // האם YEMOT_TOKEN הוגדר בשרת
-  }));
+  add('GET', '/api/integration', async () => {
+    const s = await repo.getSettings();
+    const ml = s.masaLink || {};
+    return ok({
+      webhookPath: '/api/games/webhook',
+      introTextPath: '/api/get-intro-text',
+      archetypePath: '/api/get-archetype/by-phone',
+      method: 'POST',
+      tokenRequired: !!process.env.GAME_TOKEN,
+      notifyTokenSet: !!process.env.YEMOT_TOKEN, // האם YEMOT_TOKEN הוגדר בשרת
+      masaLink: {
+        enabled: !!ml.enabled,
+        credentialsSet: !!((ml.username || process.env.INFORU_USERNAME) && (ml.token || process.env.INFORU_TOKEN)),
+        resultsBaseUrl: ml.resultsBaseUrl || '',
+      },
+    });
+  });
+
+  // בדיקת MasaLink — שולח הפעלת אוטומציה למייל שנבחר עם קישור לדוגמה
+  add('POST', '/api/masalink/test', async ({ body, req }) => {
+    const s = await repo.getSettings();
+    const ml = s.masaLink || {};
+    const username = ml.username || process.env.INFORU_USERNAME || '';
+    const token = ml.token || process.env.INFORU_TOKEN || '';
+    const email = String(body?.email || '').trim();
+    if (!username || !token) return err('חסרים Username/Token של Inforu (הגדר בטאב הגדרות)', 400);
+    if (!email) return err('נדרש מייל לבדיקה');
+    const gameId = String(body?.gameId || 'DEMO').trim();
+    const link = buildResultsLink(ml.resultsBaseUrl || originFromReq(req), gameId);
+    const r = await sendMasaLink({
+      baseUrl: ml.baseUrl, username, token, apiEventName: ml.apiEventName || process.env.INFORU_EVENT,
+      linkParam: ml.linkParam, email, link,
+    });
+    return ok(r);
+  });
 
   // בדיקת צינתוק — שולח צינתוק בודד למספר שנבחר
   add('POST', '/api/notify/test', async ({ body }) => {

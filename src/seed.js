@@ -21,6 +21,17 @@ export function defaultSettings() {
     matching: { metric: 'euclidean', topN: 3 },
     // צינתוק אוטומטי (ימות המשיח) בסיום קליטת תוצאות משחק — כבוי כברירת מחדל
     notify: { enabled: false, callerId: '', tzintukTimeOut: 9, onlyAnswered: true },
+    // MasaLink — שליחת אוטומציה ב-Inforu (מייל למפעיל עם קישור לעמוד התוצאות) — כבוי כברירת מחדל
+    // הפרטים הרגישים (Username/Token) מוזנים בפאנל הניהול / משתני סביבה, לא בקוד.
+    masaLink: {
+      enabled: false,
+      baseUrl: 'https://capi.inforu.co.il/api/Automation/TriggerParameters',
+      username: '',
+      token: '',
+      apiEventName: 'MASALINK',
+      linkParam: 'Text27',
+      resultsBaseUrl: '', // בסיס הקישור הציבורי (למשל https://app.example.com); ריק => נגזר מהבקשה
+    },
   };
 }
 

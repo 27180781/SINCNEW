@@ -246,6 +246,39 @@
         </div>
       </div>
       <div class="card">
+        <div class="row">
+          <h2 style="margin:0">🔗 MasaLink — שליחת מייל למפעיל (Inforu)</h2>
+          <span class="badge" id="masaLinkBadge" style="margin-inline-start:8px"></span>
+        </div>
+        <p><small>בסיום קליטת תוצאות משחק (אחרי הפילוח והצינתוק), המערכת תפעיל אוטומציה ב-Inforu
+          עם מייל מפעיל המשחק (<code>ownerEmail</code>) וקישור ישיר לעמוד תוצאות המפגש
+          (<code>/session/&lt;מזהה המשחק&gt;</code>) בפרמטר הקישור.</small></p>
+        <div class="field">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="mlEnabled" style="width:auto" /> הפעלת שליחת MasaLink אוטומטית
+          </label>
+        </div>
+        <div class="grid cols-2">
+          <div class="field"><label>Username</label><input id="mlUsername" placeholder="שם המשתמש ב-Inforu" /></div>
+          <div class="field"><label>Token</label><input id="mlToken" type="password" placeholder="הטוקן של Inforu" /></div>
+        </div>
+        <div class="grid cols-2">
+          <div class="field"><label>ApiEventName</label><input id="mlEventName" placeholder="MASALINK" /></div>
+          <div class="field"><label>פרמטר הקישור</label><input id="mlLinkParam" placeholder="Text27" /></div>
+        </div>
+        <div class="field"><label>כתובת בסיס לקישור התוצאות (למשל https://app.example.com — ריק = לפי כתובת הבקשה)</label><input id="mlResultsBaseUrl" placeholder="https://…" /></div>
+        <div class="field"><label>כתובת ה-API של Inforu (ברירת מחדל: TriggerParameters)</label><input id="mlBaseUrl" placeholder="https://capi.inforu.co.il/api/Automation/TriggerParameters" /></div>
+        <button class="primary" id="saveMasaLinkBtn">שמירת הגדרות MasaLink</button>
+        <hr style="border:none;border-top:1px solid var(--line);margin:16px 0" />
+        <h3>בדיקה — שליחת MasaLink</h3>
+        <div class="row">
+          <input id="mlTestEmail" type="email" placeholder="מייל לבדיקה" style="max-width:240px" />
+          <input id="mlTestGameId" placeholder="מזהה משחק (רשות)" style="max-width:180px" />
+          <button id="mlTestBtn">שלח MasaLink בדיקה</button>
+        </div>
+        <div id="mlTestResult" style="margin-top:8px"></div>
+      </div>
+      <div class="card">
         <h2>היסודות</h2>
         <div id="elementsEditor" class="grid cols-2"></div>
       </div>
