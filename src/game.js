@@ -21,8 +21,9 @@ export function validateGamePayload(raw) {
     return { ok: false, error: 'שדה participants חסר או אינו מערך' };
   }
   // מטא-דאטה של מפעיל המשחק — נשמר לטיפול בהמשך (מייל + תיקיית Cloudinary)
+  // המשחק שולח את המייל בשדה ownerEmail; נתמכים גם מפתחות חלופיים ליתר ביטחון.
   const operator = raw.operator && typeof raw.operator === 'object' ? raw.operator : {};
-  const email = String(raw.email ?? raw.operatorEmail ?? raw.userEmail ?? raw.mail ?? operator.email ?? '').trim();
+  const email = String(raw.ownerEmail ?? raw.email ?? raw.operatorEmail ?? raw.userEmail ?? raw.mail ?? operator.email ?? '').trim();
   const cloudinaryFolder = String(raw.cloudinaryFolder ?? raw.cloudinary_folder ?? operator.cloudinaryFolder ?? '').trim();
 
   const payload = {

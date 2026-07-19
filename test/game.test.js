@@ -117,6 +117,11 @@ test('validateGamePayload: לוכד מייל מפעיל ותיקיית Cloudinar
   assert.equal(v.payload.cloudinaryFolder, 'games/abc123');
 });
 
+test('validateGamePayload: מפתח ownerEmail (הפורמט של המשחק)', () => {
+  const v = validateGamePayload({ gameId: 'g', ownerEmail: 'na73438@gmail.com', participants: [] });
+  assert.equal(v.payload.email, 'na73438@gmail.com');
+});
+
 test('validateGamePayload: מפתחות חלופיים למייל (operatorEmail) + operator מקונן', () => {
   const v1 = validateGamePayload({ gameId: 'g', operatorEmail: 'op@x.co', participants: [] });
   assert.equal(v1.payload.email, 'op@x.co');
