@@ -127,6 +127,7 @@ export class JsonRepo {
       name: b.name,
       createdAt: b.createdAt,
       source: b.source || null,
+      gameId: b.gameId || null,
       count: b.result?.count || 0,
     }));
   }

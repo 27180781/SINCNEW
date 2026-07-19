@@ -10,6 +10,7 @@ import { parseXlsx } from './xlsx.js';
 import { parseCsv, rowsToQuestions } from './mapping.js';
 import { collectPhones, sendTzintuk, normalizePhone } from './tzintuk.js';
 import { findLatestParticipantByPhone, buildIntroText, toYemotRead, toYemotIdList } from './intro.js';
+import { assignPersonalCodes, findByPersonalCode, findByPhone, computeInsights } from './insights.js';
 
 const ok = (body, status = 200) => ({ status, body });
 const err = (message, status = 400) => ({ status, body: { error: message } });
@@ -307,6 +308,23 @@ export function createRouter(repo) {
     return ok({ imported: clean.length, total: await repo.countPersonalities() }, 201);
   });
 
+  // מספור סידורי לכל סוגי האישיות (מספרי קבצי השמע בימות)
+  // mode='fill' (ברירת מחדל) — משלים מספר רק לחסרים, בהמשך למקסימום הקיים.
+  // mode='all'  — ממספר מחדש 1..N לפי הסדר (מאפס מספרים קיימים).
+  add('POST', '/api/personalities/renumber', async ({ body }) => {
+    const mode = body?.mode === 'all' ? 'all' : 'fill';
+    const all = await repo.allPersonalities();
+    if (!all.length) return ok({ renumbered: 0, mode });
+    if (mode === 'all') {
+      all.forEach((p, i) => { p.number = i + 1; });
+    } else {
+      let next = 1 + all.reduce((m, x) => Math.max(m, Number(x.number) || 0), 0);
+      for (const p of all) if (p.number == null || p.number === '') p.number = next++;
+    }
+    await repo.setPersonalities(all);
+    return ok({ renumbered: all.length, mode });
+  });
+
   // חידוש המאגר האלגוריתמי
   add('POST', '/api/personalities/generate', async ({ body }) => {
     const step = Math.max(5, Math.min(50, parseInt(body?.step, 10) || 10));
@@ -428,6 +446,10 @@ export function createRouter(repo) {
     // צירוף נתוני המשחק (ניקוד/נכונות/קבוצה) לכל תוצאה מחושבת
     const gameById = new Map(participants.map((p) => [p.id, p.game]));
     for (const r of result.results) if (gameById.has(r.id)) r.game = gameById.get(r.id);
+
+    // הקצאת קוד אישי למשתתפים ללא טלפון תקין (רק שם) — כדי שיוכלו לקבל תוצאה לפי הקוד
+    const existingBatches = await repo.allBatches();
+    assignPersonalCodes(result.results, existingBatches);
 
     const batch = {
       id: newId('batch'),
@@ -586,12 +608,10 @@ export function createRouter(repo) {
     return ok({ ok: true, phone, batchId: batch.id, text, yemot: toYemotIdList(text), match: r.match });
   });
 
-  // ---- מספר סוג האישיות לפי טלפון (לשלוחה 1 בימות — מחזיר רק מספר) ----
-  // ימות תשמיע את קובץ השמע ששמו המספר. ברירת מחדל: מספר גולמי;
-  // ?format=file מחזיר id_list_message=f-<מספר> (השמעת הקובץ ישירות).
+  // ---- מספר סוג האישיות לפי טלפון (לשלוחה 1 בימות — מחזיר רק מספר גולמי) ----
+  // ימות תשמיע את קובץ השמע ששמו המספר.
   async function archetypeByPhoneHandler({ query, body }) {
     const phoneRaw = query.ApiPhone ?? query.apiPhone ?? query.phone ?? body?.ApiPhone ?? body?.phone;
-    const fmt = query.format ?? body?.format;
     const notFound = query.notFound ?? body?.notFound ?? '0'; // מספר ברירת מחדל אם אין תוצאה
 
     const batches = await repo.allBatches();
@@ -602,12 +622,86 @@ export function createRouter(repo) {
       const all = await repo.allPersonalities();
       number = all.find((p) => p.id === result.match.id)?.number;
     }
-    const value = number != null ? String(number) : String(notFound);
-    if (fmt === 'file' || fmt === 'idlist') return textResp(`id_list_message=f-${value}`);
-    return textResp(value); // ברירת מחדל: רק המספר
+    return textResp(number != null ? String(number) : String(notFound)); // רק מספר
   }
   add('GET', '/api/get-archetype/by-phone', archetypeByPhoneHandler);
   add('POST', '/api/get-archetype/by-phone', archetypeByPhoneHandler);
+
+  // ---- סשנים / תוצאות אישיות (עמודי משתתפים) ----
+  const maskPhone = (num) => {
+    const d = String(num ?? '').replace(/\D/g, '');
+    if (d.length < 5) return null;
+    return d.slice(0, 3) + '***' + d.slice(-2);
+  };
+  const publicResult = (r) => ({
+    name: r.name || null,
+    personalCode: r.personalCode || null,
+    phoneMasked: maskPhone(r.game?.number),
+    percentages: r.percentages,
+    dominant: r.dominant,
+    answered: r.answered,
+    match: r.match ? { name: r.match.name, number: r.match.number, similarity: r.match.similarity } : null,
+    game: r.game ? { score: r.game.score, numCorrect: r.game.numCorrect, numAnswers: r.game.numAnswers, groupId: r.game.groupId } : null,
+  });
+
+  // רשימת סשנים (מפגשי משחק) — לפאנל
+  add('GET', '/api/sessions', async () => {
+    const batches = await repo.allBatches();
+    const list = batches
+      .filter((b) => b.gameId)
+      .map((b) => ({
+        gameId: b.gameId,
+        gameName: b.game?.gameName || b.name,
+        sentAt: b.sentAt,
+        createdAt: b.createdAt,
+        count: b.result?.count || 0,
+      }))
+      .sort((a, c) => (Date.parse(c.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
+    return ok(list);
+  });
+
+  // צפייה בסשן לפי מזהה משחק (ציבורי — הקישור הייחודי)
+  add('GET', '/api/sessions/:gameId', async ({ params }) => {
+    const batches = await repo.allBatches();
+    const matching = batches.filter((b) => String(b.gameId) === String(params.gameId));
+    if (!matching.length) return err('סשן לא נמצא', 404);
+    const b = matching.sort((x, y) => (Date.parse(y.createdAt) || 0) - (Date.parse(x.createdAt) || 0))[0];
+    const settings = await repo.getSettings();
+    return ok({
+      gameId: b.gameId,
+      gameName: b.game?.gameName || b.name,
+      sentAt: b.sentAt,
+      count: b.result?.count || 0,
+      averages: b.result?.averages || {},
+      elements: settings.elements,
+      groups: b.game?.groups || [],
+      participants: (b.result?.results || []).map(publicResult),
+    });
+  });
+
+  // תוצאה אישית + תובנות (לפי טלפון או קוד אישי) — ציבורי
+  add('GET', '/api/my-result', async ({ query }) => {
+    const batches = await repo.allBatches();
+    const settings = await repo.getSettings();
+    const keys = elementKeysFrom(settings);
+    let found = null;
+    if (query.phone) found = findByPhone(batches, query.phone);
+    else if (query.code) found = findByPersonalCode(batches, query.code);
+    else return err('נדרש פרמטר phone או code');
+
+    if (!found || !found.result || !(found.result.answered > 0)) return err('לא נמצאו תוצאות למספר/קוד שהוזן', 404);
+    const insights = computeInsights(found.result, found.batch, batches, keys);
+    return ok({
+      name: found.result.name || null,
+      personalCode: found.result.personalCode || null,
+      percentages: found.result.percentages,
+      dominant: found.result.dominant,
+      match: found.result.match ? { name: found.result.match.name, number: found.result.match.number, similarity: found.result.match.similarity, description: found.result.match.description } : null,
+      elements: settings.elements,
+      session: { gameId: found.batch?.gameId || null, gameName: found.batch?.game?.gameName || found.batch?.name || null },
+      insights,
+    });
+  });
 
   // ---- סטטיסטיקה ללוח הבקרה ----
   add('GET', '/api/stats', async () => {

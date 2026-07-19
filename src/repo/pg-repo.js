@@ -227,7 +227,7 @@ export class PgRepo {
   // ---- מפגשים ----
   async listBatches() {
     const { rows } = await this.q(
-      `SELECT id, name, created_at, source, COALESCE(jsonb_array_length(result->'results'), 0) AS count
+      `SELECT id, name, created_at, source, game_id, COALESCE(jsonb_array_length(result->'results'), 0) AS count
        FROM batches ORDER BY created_at ASC`
     );
     return rows.map((r) => ({
@@ -235,6 +235,7 @@ export class PgRepo {
       name: r.name,
       createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
       source: r.source || null,
+      gameId: r.game_id || null,
       count: Number(r.count) || 0,
     }));
   }

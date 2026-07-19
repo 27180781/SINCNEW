@@ -296,6 +296,15 @@ async function delPersonality(p) {
 }
 document.getElementById('addPersBtn').addEventListener('click', () => editPersonality(null));
 
+document.getElementById('renumberPersBtn').addEventListener('click', async () => {
+  const all = confirm('למספר מחדש 1..N את כל סוגי האישיות לפי הסדר?\n\nאישור = מספור מלא 1..N (מאפס מספרים קיימים)\nביטול = השלמת מספרים חסרים בלבד');
+  try {
+    const r = await api.post('/api/personalities/renumber', { mode: all ? 'all' : 'fill' });
+    toast(`מוספרו ${r.renumbered} סוגים`);
+    loadPersonalities();
+  } catch (e) { toast(e.message, true); }
+});
+
 document.getElementById('genPersBtn').addEventListener('click', () => {
   const form = el('div');
   form.appendChild(el('h2', {}, 'חידוש מאגר סוגי אישיות'));
@@ -580,6 +589,7 @@ async function loadBatches() {
         el('div', {}, el('small', {}, `${b.count} משתתפים · ${new Date(b.createdAt).toLocaleDateString('he-IL')}`)),
       ]),
       el('div', { class: 'spacer' }),
+      b.gameId ? el('a', { class: 'btn small', href: `/session/${encodeURIComponent(b.gameId)}`, target: '_blank', title: 'קישור ציבורי לצפייה בתוצאות המפגש' }, '🔗 קישור סשן') : null,
       el('button', { class: 'small', onclick: () => viewBatch(b.id) }, 'הצגה'),
       el('button', { class: 'small danger', onclick: async () => { if (confirm('למחוק?')) { await api.del(`/api/batches/${b.id}`); loadBatches(); } } }, '✕'),
     ]));

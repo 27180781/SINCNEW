@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>התוצאה האישית שלי · ארבעת היסודות</title>
+  <link rel="stylesheet" href="/css/app.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>" />
+  <style>
+    .result-hero { text-align: center; }
+    .donut-wrap { display: flex; justify-content: center; margin: 8px 0 4px; }
+    .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; max-width: 340px; margin: 12px auto 0; }
+    .legend .li { display: flex; align-items: center; gap: 8px; font-size: .95rem; }
+    .legend .sw { width: 14px; height: 14px; border-radius: 4px; flex: none; }
+    .legend .val { margin-inline-start: auto; font-weight: 800; }
+    .insight { display: flex; gap: 12px; align-items: center; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fafbff; }
+    .insight .ic { font-size: 1.7rem; flex: none; }
+    .insight .big { font-size: 1.6rem; font-weight: 800; color: var(--accent); }
+    .match-card { text-align: center; border-top: 4px solid var(--accent); }
+    .dom-chip { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 1.1rem; padding: 6px 16px; border-radius: 999px; color: #fff; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><span>🌿</span> ארבעת היסודות</div>
+    <nav>
+      <a href="/">דף הבית</a>
+    </nav>
+  </div>
+
+  <div class="wrap" style="max-width: 720px">
+    <!-- טופס חיפוש -->
+    <div class="card" id="lookupCard">
+      <h1>גלה את התוצאה האישית שלך</h1>
+      <p class="muted-box">הזן את מספר הטלפון שאיתו השתתפת במשחק — או את הקוד האישי שקיבלת (אם השתתפת ללא טלפון).</p>
+      <div class="field">
+        <label>מספר טלפון</label>
+        <input id="phoneInput" type="tel" inputmode="numeric" placeholder="050-0000000" />
+      </div>
+      <div style="text-align:center; color:var(--muted); margin:6px 0; font-size:.85rem">— או —</div>
+      <div class="field">
+        <label>קוד אישי</label>
+        <input id="codeInput" type="text" inputmode="numeric" placeholder="לדוגמה 1001" />
+      </div>
+      <div class="row">
+        <button class="primary" id="lookupBtn">הצג את התוצאה שלי ⟵</button>
+      </div>
+      <p id="lookupErr" style="color:#b91c1c; margin-top:10px; display:none"></p>
+    </div>
+
+    <!-- תוצאה -->
+    <div id="resultView" style="display:none"></div>
+  </div>
+
+  <script type="module" src="/js/result.js"></script>
+</body>
+</html>

@@ -29,11 +29,33 @@ const PUBLIC_API = new Set([
   'POST /api/get-intro-text',
   'GET /api/get-archetype/by-phone', // ימות (שלוחה 1) — מחזיר מספר סוג האישיות
   'POST /api/get-archetype/by-phone',
+  'GET /api/my-result', // עמוד תוצאה אישית (טלפון/קוד)
 ]);
+// נתיבים ציבוריים לפי תחילית (עבור פרמטרים דינמיים)
+const PUBLIC_API_PREFIXES = ['GET /api/sessions/']; // צפייה בסשן לפי מזהה — הקישור הייחודי
+function isPublicApi(method, pathname) {
+  const key = `${method} ${pathname}`;
+  return PUBLIC_API.has(key) || PUBLIC_API_PREFIXES.some((pfx) => key.startsWith(pfx));
+}
 const WEBHOOK_PATH = '/api/games/webhook';
 
 // --- אתחול שכבת האחסון (Postgres אם הוגדר DATABASE_URL, אחרת קובץ JSON) ---
 const { repo, kind: storageKind } = await createRepo({ dataFile: DATA_FILE });
+
+// מיגרציה שקטה: השלמת מספר סידורי לסוגי אישיות שאין להם (נתונים ותיקים).
+// המספרים משמשים כשמות קבצי השמע בימות (1, 2, 3 … ולא 001) — לכן חובה שלכל סוג יהיה מספר.
+try {
+  const all = await repo.allPersonalities();
+  if (all.some((p) => p.number == null)) {
+    let next = 1 + all.reduce((m, x) => Math.max(m, Number(x.number) || 0), 0);
+    for (const p of all) if (p.number == null) p.number = next++;
+    await repo.setPersonalities(all);
+    console.log(`     ↺ הושלמו מספרים סידוריים לסוגי אישיות (${all.length})`);
+  }
+} catch (e) {
+  console.error('כשל בהשלמת מספרים סידוריים:', e?.message || e);
+}
+
 const routes = createRouter(repo);
 
 const MIME = {
@@ -115,6 +137,9 @@ async function serveStatic(res, pathname) {
   // מיפוי נתיבים ידידותיים
   if (pathname === '/' || pathname === '') pathname = '/index.html';
   if (pathname === '/admin' || pathname === '/admin/') pathname = '/admin.html';
+  // קישורים ייחודיים ניתנים-לשרשור: /session/<gameId>  ו-/result/<code>
+  if (pathname === '/session' || pathname.startsWith('/session/')) pathname = '/session.html';
+  if (pathname === '/result' || pathname.startsWith('/result/')) pathname = '/result.html';
 
   // מניעת path traversal
   const safe = normalize(pathname).replace(/^(\.\.[/\\])+/, '');
@@ -166,7 +191,7 @@ const server = http.createServer(async (req, res) => {
       }
     }
     // שער הרשאה אופציונלי לנתיבי ניהול
-    if (ADMIN_TOKEN && !PUBLIC_API.has(`${req.method} ${pathname}`)) {
+    if (ADMIN_TOKEN && !isPublicApi(req.method, pathname)) {
       const token = req.headers['x-admin-token'] || url.searchParams.get('token') || '';
       if (token !== ADMIN_TOKEN) return sendJson(res, 401, { error: 'נדרשת הרשאת ניהול' });
     }

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>תוצאות המפגש · ארבעת היסודות</title>
+  <link rel="stylesheet" href="/css/app.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>" />
+  <style>
+    .donut-wrap { display: flex; justify-content: center; margin: 4px 0; }
+    .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; max-width: 320px; margin: 10px auto 0; }
+    .legend .li { display: flex; align-items: center; gap: 8px; font-size: .9rem; }
+    .legend .sw { width: 13px; height: 13px; border-radius: 4px; flex: none; }
+    .legend .val { margin-inline-start: auto; font-weight: 800; }
+    .dom-tag { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: .8rem; padding: 2px 9px; border-radius: 999px; color: #fff; }
+    td .mini-profile { width: 90px; }
+    .p-name { font-weight: 700; }
+    .p-id { color: var(--muted); font-size: .8rem; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><span>🌿</span> ארבעת היסודות</div>
+    <nav>
+      <a href="/">דף הבית</a>
+    </nav>
+  </div>
+
+  <div class="wrap">
+    <!-- טופס הזנת מזהה -->
+    <div class="card" id="lookupCard" style="max-width:560px;margin-inline:auto">
+      <h1>תוצאות מפגש-משחק</h1>
+      <p class="muted-box">הזן את מזהה המשחק (gameId) כדי לצפות ברשימת המשתתפים והתוצאות של המפגש.</p>
+      <div class="field">
+        <label>מזהה משחק</label>
+        <input id="gameIdInput" type="text" placeholder="לדוגמה fn-123" />
+      </div>
+      <div class="row"><button class="primary" id="lookupBtn">הצג מפגש ⟵</button></div>
+      <p id="lookupErr" style="color:#b91c1c; margin-top:10px; display:none"></p>
+    </div>
+
+    <div id="sessionView" style="display:none"></div>
+  </div>
+
+  <script type="module" src="/js/session.js"></script>
+</body>
+</html>
