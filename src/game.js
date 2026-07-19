@@ -20,10 +20,17 @@ export function validateGamePayload(raw) {
   if (!Array.isArray(raw.participants)) {
     return { ok: false, error: 'שדה participants חסר או אינו מערך' };
   }
+  // מטא-דאטה של מפעיל המשחק — נשמר לטיפול בהמשך (מייל + תיקיית Cloudinary)
+  const operator = raw.operator && typeof raw.operator === 'object' ? raw.operator : {};
+  const email = String(raw.email ?? raw.operatorEmail ?? raw.userEmail ?? raw.mail ?? operator.email ?? '').trim();
+  const cloudinaryFolder = String(raw.cloudinaryFolder ?? raw.cloudinary_folder ?? operator.cloudinaryFolder ?? '').trim();
+
   const payload = {
     gameId: raw.gameId != null ? String(raw.gameId) : '',
     gameName: raw.gameName != null ? String(raw.gameName) : '',
     sentAt: raw.sentAt != null ? String(raw.sentAt) : new Date().toISOString(),
+    email,
+    cloudinaryFolder,
     participantCount: Number.isFinite(Number(raw.participantCount)) ? Number(raw.participantCount) : raw.participants.length,
     participants: raw.participants.map((p) => ({
       number: p.number != null ? String(p.number) : '',

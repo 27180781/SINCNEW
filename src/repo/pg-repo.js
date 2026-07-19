@@ -30,20 +30,24 @@ CREATE TABLE IF NOT EXISTS personalities (
 );
 ALTER TABLE personalities ADD COLUMN IF NOT EXISTS num INT;
 CREATE TABLE IF NOT EXISTS batches (
-  id           TEXT PRIMARY KEY,
-  name         TEXT,
-  created_at   TIMESTAMPTZ DEFAULT now(),
-  participants JSONB,
-  result       JSONB,
-  source       TEXT,
-  game_id      TEXT,
-  sent_at      TEXT,
-  game         JSONB
+  id                TEXT PRIMARY KEY,
+  name              TEXT,
+  created_at        TIMESTAMPTZ DEFAULT now(),
+  participants      JSONB,
+  result            JSONB,
+  source            TEXT,
+  game_id           TEXT,
+  sent_at           TEXT,
+  email             TEXT,
+  cloudinary_folder TEXT,
+  game              JSONB
 );
-ALTER TABLE batches ADD COLUMN IF NOT EXISTS source  TEXT;
-ALTER TABLE batches ADD COLUMN IF NOT EXISTS game_id TEXT;
-ALTER TABLE batches ADD COLUMN IF NOT EXISTS sent_at TEXT;
-ALTER TABLE batches ADD COLUMN IF NOT EXISTS game    JSONB;
+ALTER TABLE batches ADD COLUMN IF NOT EXISTS source            TEXT;
+ALTER TABLE batches ADD COLUMN IF NOT EXISTS game_id           TEXT;
+ALTER TABLE batches ADD COLUMN IF NOT EXISTS sent_at           TEXT;
+ALTER TABLE batches ADD COLUMN IF NOT EXISTS email             TEXT;
+ALTER TABLE batches ADD COLUMN IF NOT EXISTS cloudinary_folder TEXT;
+ALTER TABLE batches ADD COLUMN IF NOT EXISTS game              JSONB;
 CREATE INDEX IF NOT EXISTS batches_game_key ON batches (game_id, sent_at);
 `;
 
@@ -61,6 +65,8 @@ function rowToBatch(r) {
   if (r.source != null) batch.source = r.source;
   if (r.game_id != null) batch.gameId = r.game_id;
   if (r.sent_at != null) batch.sentAt = r.sent_at;
+  if (r.email != null) batch.email = r.email;
+  if (r.cloudinary_folder != null) batch.cloudinaryFolder = r.cloudinary_folder;
   if (r.game != null) batch.game = r.game;
   return batch;
 }
@@ -243,29 +249,30 @@ export class PgRepo {
   }
   async allBatches() {
     const { rows } = await this.q(
-      'SELECT id, name, created_at, participants, result, source, game_id, sent_at, game FROM batches ORDER BY created_at ASC'
+      'SELECT id, name, created_at, participants, result, source, game_id, sent_at, email, cloudinary_folder, game FROM batches ORDER BY created_at ASC'
     );
     return rows.map(rowToBatch);
   }
   async getBatch(id) {
     const { rows } = await this.q(
-      'SELECT id, name, created_at, participants, result, source, game_id, sent_at, game FROM batches WHERE id = $1',
+      'SELECT id, name, created_at, participants, result, source, game_id, sent_at, email, cloudinary_folder, game FROM batches WHERE id = $1',
       [id]
     );
     return rows[0] ? rowToBatch(rows[0]) : null;
   }
   async findGameBatch(gameId, sentAt) {
     const { rows } = await this.q(
-      'SELECT id, name, created_at, participants, result, source, game_id, sent_at, game FROM batches WHERE game_id = $1 AND sent_at = $2 LIMIT 1',
+      'SELECT id, name, created_at, participants, result, source, game_id, sent_at, email, cloudinary_folder, game FROM batches WHERE game_id = $1 AND sent_at = $2 LIMIT 1',
       [gameId, sentAt]
     );
     return rows[0] ? rowToBatch(rows[0]) : null;
   }
   async addBatch(b) {
     await this.q(
-      `INSERT INTO batches (id, name, created_at, participants, result, source, game_id, sent_at, game)
-       VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, $9::jsonb)`,
-      [b.id, b.name, b.createdAt, J(b.participants), J(b.result), b.source || null, b.gameId || null, b.sentAt || null, b.game ? J(b.game) : null]
+      `INSERT INTO batches (id, name, created_at, participants, result, source, game_id, sent_at, email, cloudinary_folder, game)
+       VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, $9, $10, $11::jsonb)`,
+      [b.id, b.name, b.createdAt, J(b.participants), J(b.result), b.source || null, b.gameId || null, b.sentAt || null,
+       b.email || null, b.cloudinaryFolder || null, b.game ? J(b.game) : null]
     );
     return b;
   }
@@ -303,10 +310,10 @@ export class PgRepo {
       await this._insertPersonalities(client, data.personalities || []);
       for (const b of data.batches || []) {
         await client.query(
-          `INSERT INTO batches (id, name, created_at, participants, result, source, game_id, sent_at, game)
-           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, $9::jsonb)`,
+          `INSERT INTO batches (id, name, created_at, participants, result, source, game_id, sent_at, email, cloudinary_folder, game)
+           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, $9, $10, $11::jsonb)`,
           [b.id, b.name, b.createdAt || new Date().toISOString(), J(b.participants), J(b.result),
-           b.source || null, b.gameId || null, b.sentAt || null, b.game ? J(b.game) : null]
+           b.source || null, b.gameId || null, b.sentAt || null, b.email || null, b.cloudinaryFolder || null, b.game ? J(b.game) : null]
         );
       }
       await client.query('COMMIT');

@@ -118,6 +118,7 @@ async function checkRepo(repo) {
   const gameBatch = {
     id: 'gb1', name: 'משחק', createdAt: new Date().toISOString(),
     source: 'game', gameId: 'G1', sentAt: '2026-01-01T00:00:00Z',
+    email: 'operator@example.com', cloudinaryFolder: 'games/G1',
     game: { gameId: 'G1', gameName: 'משחק' }, participants: [], result: { count: 0, results: [] },
   };
   await repo.addBatch(gameBatch);
@@ -125,6 +126,8 @@ async function checkRepo(repo) {
   assert.ok(found, 'findGameBatch מוצא לפי gameId+sentAt');
   assert.equal(found.source, 'game');
   assert.equal(found.game.gameName, 'משחק');
+  assert.equal(found.email, 'operator@example.com', 'email של מפעיל נשמר');
+  assert.equal(found.cloudinaryFolder, 'games/G1', 'cloudinaryFolder נשמר');
   assert.equal(await repo.findGameBatch('G1', 'תאריך-אחר'), null);
   const summary = await repo.listBatches();
   assert.equal(summary[0].source, 'game', 'listBatches כולל source');

@@ -106,3 +106,27 @@ test('gamePayloadToParticipants: fallback למיקום כשאין queId מוגד
   assert.equal(res.results[0].counts.fire, 1);
   assert.equal(res.results[0].counts.earth, 1);
 });
+
+test('validateGamePayload: לוכד מייל מפעיל ותיקיית Cloudinary', () => {
+  const v = validateGamePayload({
+    gameId: 'g', email: 'operator@example.com', cloudinaryFolder: 'games/abc123',
+    participants: [],
+  });
+  assert.equal(v.ok, true);
+  assert.equal(v.payload.email, 'operator@example.com');
+  assert.equal(v.payload.cloudinaryFolder, 'games/abc123');
+});
+
+test('validateGamePayload: מפתחות חלופיים למייל (operatorEmail) + operator מקונן', () => {
+  const v1 = validateGamePayload({ gameId: 'g', operatorEmail: 'op@x.co', participants: [] });
+  assert.equal(v1.payload.email, 'op@x.co');
+  const v2 = validateGamePayload({ gameId: 'g', operator: { email: 'nested@x.co', cloudinaryFolder: 'f/1' }, participants: [] });
+  assert.equal(v2.payload.email, 'nested@x.co');
+  assert.equal(v2.payload.cloudinaryFolder, 'f/1');
+});
+
+test('validateGamePayload: ללא מטא-דאטה => מחרוזות ריקות', () => {
+  const v = validateGamePayload({ gameId: 'g', participants: [] });
+  assert.equal(v.payload.email, '');
+  assert.equal(v.payload.cloudinaryFolder, '');
+});

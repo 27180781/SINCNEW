@@ -687,6 +687,13 @@ function renderInboxEntry(e) {
       `${e.participantCount ?? '?'} משתתפים · ${e.method} · ${new Date(e.receivedAt).toLocaleString('he-IL')}`),
   ]));
   if (e.error) card.appendChild(el('div', { class: 'muted-box', style: 'color:#b91c1c;margin-top:8px' }, 'שגיאה: ' + e.error));
+  // מטא-דאטה של מפעיל המשחק (נשמר לטיפול בהמשך)
+  if (e.email || e.cloudinaryFolder) {
+    const meta = el('div', { class: 'muted-box', style: 'margin-top:8px' }, [el('strong', {}, '📎 נשמר לטיפול בהמשך: ')]);
+    if (e.email) meta.appendChild(el('span', { style: 'margin-inline-start:6px' }, `✉ מייל מפעיל: ${e.email}`));
+    if (e.cloudinaryFolder) meta.appendChild(el('span', { style: 'margin-inline-start:12px' }, `🖼 תיקיית Cloudinary: ${e.cloudinaryFolder}`));
+    card.appendChild(meta);
+  }
   if (e.mappedMissing) card.appendChild(el('div', { class: 'muted-box', style: 'color:#b8860b;margin-top:8px' },
     'שים לב: אין מיפוי מוגדר במערכת — התשובות לא מופו ליסודות. העלה קובץ מיפוי בטאב "מיפוי יסודות".'));
   if (e.notify) card.appendChild(el('div', { class: 'muted-box', style: 'margin-top:8px' }, inboxNotifyText(e.notify)));

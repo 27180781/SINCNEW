@@ -457,6 +457,8 @@ export function createRouter(repo) {
     entry.gameId = game.gameId;
     entry.gameName = game.gameName;
     entry.sentAt = game.sentAt;
+    entry.email = game.email || null; // מייל מפעיל המשחק (לטיפול בהמשך)
+    entry.cloudinaryFolder = game.cloudinaryFolder || null; // תיקיית Cloudinary (לטיפול בהמשך)
     entry.participantCount = game.participants.length;
 
     // מניעת כפילויות לפי gameId + sentAt
@@ -490,8 +492,11 @@ export function createRouter(repo) {
       source: 'game',
       gameId: game.gameId,
       sentAt: game.sentAt,
+      email: game.email || null, // מייל מפעיל המשחק — נשמר לטיפול בהמשך
+      cloudinaryFolder: game.cloudinaryFolder || null, // תיקיית Cloudinary — נשמר לטיפול בהמשך
       game: {
         gameId: game.gameId, gameName: game.gameName, sentAt: game.sentAt,
+        email: game.email || null, cloudinaryFolder: game.cloudinaryFolder || null,
         participantCount: game.participantCount, questions: game.questions, groups: game.groups,
       },
       participants,
@@ -528,7 +533,8 @@ export function createRouter(repo) {
       }
     }
 
-    return finish(ok({ ok: true, stored: true, batchId: batch.id, participants: result.count, notify: entry.notify }));
+    return finish(ok({ ok: true, stored: true, batchId: batch.id, participants: result.count,
+      email: batch.email, cloudinaryFolder: batch.cloudinaryFolder, notify: entry.notify }));
   }
 
   add('POST', '/api/games/webhook', async ({ body, query }) => {
