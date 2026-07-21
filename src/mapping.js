@@ -128,20 +128,20 @@ export function mappingObjectsToQuestions(items, opts = {}) {
     if (byQueId.has(queId)) warnings.push(`שאלה ${queId} מופיעה יותר מפעם אחת — נלקחה ההופעה האחרונה`);
 
     const text = String(it.question_text ?? it.questionText ?? it.text ?? '').trim();
-    const mapping = it.answers_mapping ?? it.answersMapping ?? it.answers ?? {};
+    const mapping = it.answers_mapping ?? it.answersMapping ?? it.answers ?? null;
+    const isObj = mapping && typeof mapping === 'object' && !Array.isArray(mapping);
+    // מיון מפתחות מספרית (1,2,…,10,11) — כדי לשמור על סדר האפשרויות (לא לקסיקוגרפי)
+    const keys = isObj ? Object.keys(mapping).sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0)) : [];
     const options = [];
-    if (mapping && typeof mapping === 'object' && !Array.isArray(mapping)) {
-      // מיון מפתחות מספרית (1,2,3,4) — כדי לשמור על סדר האפשרויות
-      const keys = Object.keys(mapping).sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0));
-      for (const k of keys) {
-        const element = normalizeElement(mapping[k], validKeys, labelToKey);
-        if (!element) warnings.push(`שאלה ${queId}, תשובה ${k}: יסוד לא מוכר ("${mapping[k]}")`);
-        const answerId = parseInt(String(k).replace(/\D/g, ''), 10);
-        options.push({ answerId: Number.isFinite(answerId) ? answerId : null, text: '', element: element || '', weight: 1 });
-      }
-    } else {
-      warnings.push(`שאלה ${queId}: answers_mapping חסר או אינו אובייקט`);
+    for (const k of keys) {
+      const element = normalizeElement(mapping[k], validKeys, labelToKey);
+      if (!element) warnings.push(`שאלה ${queId}, תשובה ${k}: יסוד לא מוכר ("${mapping[k]}")`);
+      const answerId = parseInt(String(k).replace(/\D/g, ''), 10);
+      options.push({ answerId: Number.isFinite(answerId) ? answerId : null, text: '', element: element || '', weight: 1 });
     }
+    // אם אין מיפוי תשובות — אזהרה מפורשת (מונע "מחיקה שקטה" של מיפוי קיים במיזוג)
+    const noMapping = keys.length === 0;
+    if (noMapping) warnings.push(`שאלה ${queId}: answers_mapping חסר או ריק — מיפוי התשובות לא עודכן`);
 
     const existing = existingByQueId[queId];
     byQueId.set(queId, {
@@ -149,6 +149,8 @@ export function mappingObjectsToQuestions(items, opts = {}) {
       queId,
       text: text || existing?.text || `שאלה ${queId}`,
       options,
+      // סימון שאין מיפוי — כדי שהמיזוג ישמור את מיפוי היסודות הקיים ולא ימחק אותו
+      noMapping,
     });
   });
 

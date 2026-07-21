@@ -286,12 +286,28 @@ export function createRouter(repo) {
     if (mode === 'merge') {
       const map = new Map();
       for (const q of existing) map.set(q.queId != null ? `q:${q.queId}` : `id:${q.id}`, q);
-      for (const q of questions) map.set(`q:${q.queId}`, q);
+      for (const q of questions) {
+        const key = `q:${q.queId}`;
+        const prev = map.get(key);
+        // עדכון טקסט-בלבד (JSON ללא answers_mapping) לא ימחק את מיפוי היסודות הקיים
+        if (prev && q.noMapping && (prev.options || []).length) {
+          map.set(key, { ...prev, text: q.text || prev.text });
+        } else {
+          map.set(key, q);
+        }
+      }
       finalList = [...map.values()];
     } else {
       finalList = questions;
     }
-    const clean = finalList.map((q, i) => sanitizeQuestion({ ...q, order: i + 1 }, i + 1));
+    // מזהים ייחודיים בלבד (מונע התנגשות PRIMARY KEY ב-Postgres / כפילות ב-JSON)
+    const seenIds = new Set();
+    const clean = finalList.map((q, i) => {
+      const sq = sanitizeQuestion({ ...q, order: i + 1 }, i + 1);
+      if (seenIds.has(sq.id)) sq.id = newId('q');
+      seenIds.add(sq.id);
+      return sq;
+    });
     await repo.setQuestions(clean);
     return ok({ imported: questions.length, total: clean.length, mode, warnings }, 201);
   });
@@ -765,6 +781,7 @@ export function createRouter(repo) {
     if (d.length < 5) return null;
     return d.slice(0, 3) + '***' + d.slice(-2);
   };
+  // תצוגה ציבורית למשתתפים — ללא מספר סוג האישיות וללא אחוז הדמיון (נשמרים למנהל בלבד)
   const publicResult = (r) => ({
     name: r.name || null,
     personalCode: r.personalCode || null,
@@ -772,7 +789,7 @@ export function createRouter(repo) {
     percentages: r.percentages,
     dominant: r.dominant,
     answered: r.answered,
-    match: r.match ? { name: r.match.name, number: r.match.number, similarity: r.match.similarity } : null,
+    match: r.match ? { name: r.match.name } : null,
     game: r.game ? { score: r.game.score, numCorrect: r.game.numCorrect, numAnswers: r.game.numAnswers, groupId: r.game.groupId } : null,
   });
 
@@ -823,15 +840,26 @@ export function createRouter(repo) {
 
     if (!found || !found.result || !(found.result.answered > 0)) return err('לא נמצאו תוצאות למספר/קוד שהוזן', 404);
     const insights = computeInsights(found.result, found.batch, batches, keys);
+    // תובנות ציבוריות למשתתף: ללא מספרים מוחלטים בכלל-המערכת (לא חושפים כמה משתמשים יש),
+    // וללא אחוז דמיון של המשתתף הקרוב. הנתונים המלאים שמורים למנהל בתצוגות הניהול.
+    const publicInsights = {
+      dominant: insights.dominant,
+      group: { percent: insights.group?.percent ?? 0, same: insights.group?.same ?? 0, total: insights.group?.total ?? 0 },
+      global: { percent: insights.global?.percent ?? 0 }, // רק אחוז — ללא total/same
+      closest: insights.closest
+        ? { name: insights.closest.name, personalCode: insights.closest.personalCode, dominant: insights.closest.dominant }
+        : null, // ללא similarity / מספר סוג אישיות
+    };
     return ok({
       name: found.result.name || null,
       personalCode: found.result.personalCode || null,
       percentages: found.result.percentages,
       dominant: found.result.dominant,
-      match: found.result.match ? { name: found.result.match.name, number: found.result.match.number, similarity: found.result.match.similarity, description: found.result.match.description } : null,
+      // ללא number ו-similarity — נשמרים למנהל בלבד; למשתתף מוצגים שם הסוג והתיאור
+      match: found.result.match ? { name: found.result.match.name, description: found.result.match.description } : null,
       elements: settings.elements,
       session: { gameId: found.batch?.gameId || null, gameName: found.batch?.game?.gameName || found.batch?.name || null },
-      insights,
+      insights: publicInsights,
     });
   });
 

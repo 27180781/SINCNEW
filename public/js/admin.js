@@ -140,7 +140,7 @@ document.getElementById('saveMappingBtn').addEventListener('click', async () => 
     id: q.id,
     queId: q.queId,
     order: i + 1,
-    text: q.text || `שאלה ${q.queId ?? i + 1}`,
+    text: q.text != null ? q.text : '', // שומר טקסט ריק כפי שהוא (לא כופה ברירת מחדל)
     options: q.options.map((o, ci) => ({ id: o.id, answerId: o.answerId ?? ci + 1, text: o.text || '', element: o.element || '', weight: 1 })),
   }));
   try {
@@ -656,7 +656,7 @@ function renderScoreResults(result) {
       el('td', {}, el('strong', {}, r.name || r.id)),
       ...ELEMENT_ORDER.map((k) => el('td', {}, `${r.percentages[k]}%`)),
       el('td', {}, r.dominant ? el('span', { class: `el-chip el-${r.dominant}` }, elLabel(r.dominant)) : '—'),
-      el('td', {}, r.match ? r.match.name : '—'),
+      el('td', {}, r.match ? [el('span', {}, r.match.name), r.match.number != null ? el('span', { class: 'badge', style: 'margin-inline-start:6px' }, `#${r.match.number}`) : null] : '—'),
       el('td', {}, r.match ? `${r.match.similarity}%` : '—'),
     ];
     if (hasGame) {

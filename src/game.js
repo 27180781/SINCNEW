@@ -83,7 +83,9 @@ export function gamePayloadToParticipants(payload, questions) {
     const digits = s.replace(/\D/g, '');
     if (digits !== '' && byQueId.has(digits)) return byQueId.get(digits);
     const n = parseInt(digits, 10);
-    return Number.isFinite(n) ? (ordered[n - 1] || null) : null;
+    if (!Number.isFinite(n)) return null;
+    if (byQueId.has(String(n))) return byQueId.get(String(n)); // מנרמל אפסים מובילים: "07" -> "7"
+    return ordered[n - 1] || null; // גיבוי אחרון: לפי מיקום
   };
 
   return (payload.participants || []).map((gp) => {

@@ -133,3 +133,23 @@ test('mappingObjectsToQuestions: שמירת מזהה של שאלה קיימת (m
   assert.equal(questions[0].id, 'existing-id-7', 'שומר מזהה קיים');
   assert.equal(questions[0].text, 'טקסט קיים', 'שומר טקסט קיים כשלא סופק חדש');
 });
+
+test('mappingObjectsToQuestions: answers_mapping חסר -> אזהרה + options ריק + noMapping', () => {
+  for (const item of [{ question_id: 'q7' }, { question_id: 'q7', answers_mapping: null }, { question_id: 'q7', answers_mapping: {} }]) {
+    const { questions, warnings } = mappingObjectsToQuestions([item], { validKeys: KEYS, labelToKey: LABELS });
+    assert.equal(questions.length, 1);
+    assert.equal(questions[0].options.length, 0);
+    assert.equal(questions[0].noMapping, true);
+    assert.ok(warnings.some((w) => w.includes('answers_mapping')), `warning for ${JSON.stringify(item)}`);
+  }
+});
+
+test('mappingObjectsToQuestions: מיון מספרי אמיתי ל->9 תשובות (1..12, לא לקסיקוגרפי)', () => {
+  const answers_mapping = {};
+  for (let k = 1; k <= 12; k++) answers_mapping[String(k)] = KEYS[(k - 1) % 4];
+  const { questions } = mappingObjectsToQuestions([{ question_id: 'q7', answers_mapping }], { validKeys: KEYS, labelToKey: LABELS });
+  assert.deepEqual(questions[0].options.map((o) => o.answerId), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+  // אלמנט תשובה 10 חייב להיות KEYS[9%4]=KEYS[1]=water (לא זה של "2" אילו מוין לקסיקוגרפית)
+  assert.equal(questions[0].options[9].answerId, 10);
+  assert.equal(questions[0].options[9].element, KEYS[9 % 4]);
+});

@@ -76,11 +76,7 @@ function render(d) {
         : el('small', {}, '—'));
       const profCell = el('td', {}, p.percentages ? miniProfile(p.percentages) : el('small', {}, '—'));
       const matchCell = el('td', {}, p.match
-        ? el('div', {}, [
-            el('strong', {}, p.match.name || '—'),
-            p.match.number != null ? el('span', { class: 'badge', style: 'margin-inline-start:6px' }, `#${p.match.number}`) : null,
-            el('div', {}, el('small', {}, p.match.similarity != null ? `${p.match.similarity}% דמיון` : '')),
-          ])
+        ? el('strong', {}, p.match.name || '—')
         : el('small', {}, '—'));
       // קישור לעמוד האישי (לפי קוד — אם אין טלפון)
       const linkCell = el('td', {}, p.personalCode

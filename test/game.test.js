@@ -162,3 +162,18 @@ test('resolveQuestion: queId מספרי רגיל עדיין עובד', () => {
   const parts = gamePayloadToParticipants(payload, qs);
   assert.equal(parts[0].answers.q7, 1);
 });
+
+test('resolveQuestion: queId עם אפס מוביל ("07") מתמפה ל-queId 7 (לא לפי מיקום)', () => {
+  const qs = [
+    { id: 'qa', order: 1, queId: 99, options: [{ answerId: 1, element: 'earth' }] }, // מיקום 1
+    { id: 'q7', order: 2, queId: 7, options: [{ answerId: 1, element: 'water' }] },   // queId 7 במיקום 2
+  ];
+  const payload = validateGamePayload({
+    gameId: 'g', participants: [{ number: '1', answers: [{ queId: '07', answerId: 1 }] }],
+  }).payload;
+  const parts = gamePayloadToParticipants(payload, qs);
+  assert.equal(parts[0].answers.q7, 1); // מופה לשאלה queId 7 (water), לא ל-ordered[6]/מיקום
+  const res = scoreBatch(parts, qs, []);
+  assert.equal(res.results[0].counts.water, 1);
+  assert.equal(res.results[0].counts.earth, 0);
+});

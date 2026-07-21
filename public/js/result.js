@@ -75,8 +75,6 @@ function render(d) {
     const mc = el('div', { class: 'card match-card' });
     mc.appendChild(el('div', { style: 'font-size:.9rem;color:var(--muted)' }, 'סוג האישיות התואם לך'));
     mc.appendChild(el('h2', { style: 'font-size:1.5rem;margin:.2em 0' }, d.match.name || '—'));
-    if (d.match.number != null) mc.appendChild(el('span', { class: 'badge' }, `מספר ${d.match.number}`));
-    if (d.match.similarity != null) mc.appendChild(el('div', { style: 'margin-top:6px' }, el('small', {}, `${d.match.similarity}% דמיון`)));
     if (d.match.description) mc.appendChild(el('div', { class: 'desc-text', style: 'margin-top:14px;text-align:start;white-space:pre-line;line-height:1.8' }, d.match.description));
     resultView.appendChild(mc);
   }
@@ -88,9 +86,9 @@ function render(d) {
   const grid = el('div', { class: 'grid cols-2' });
 
   grid.appendChild(insightBox('👥', `${ins.group?.percent ?? 0}%`,
-    `מהמשתתפים בקבוצה שלך חולקים איתך את אותו יסוד דומיננטי (${ins.group?.same ?? 0} מתוך ${ins.group?.total ?? 0})`));
+    'מהמשתתפים בקבוצה שלך חולקים איתך את אותו יסוד דומיננטי'));
   grid.appendChild(insightBox('🌐', `${ins.global?.percent ?? 0}%`,
-    `מכלל המשתתפים במערכת דומים לך ביסוד הדומיננטי (${ins.global?.same ?? 0} מתוך ${ins.global?.total ?? 0})`));
+    'מכלל המשתתפים במערכת דומים לך ביסוד הדומיננטי'));
   card.appendChild(grid);
 
   if (ins.closest) {
@@ -100,7 +98,7 @@ function render(d) {
     box.appendChild(el('div', { class: 'ic' }, '🤝'));
     const txt = el('div', {});
     txt.appendChild(el('div', {}, [el('strong', {}, 'הכי קרוב אליך בפילוח: '), el('span', {}, who)]));
-    txt.appendChild(el('div', {}, el('small', {}, `${c.similarity ?? 0}% דמיון${c.dominant ? ` · יסוד דומיננטי ${elLabel(c.dominant)}` : ''}`)));
+    if (c.dominant) txt.appendChild(el('div', {}, el('small', {}, `יסוד דומיננטי ${elLabel(c.dominant)}`)));
     box.appendChild(txt);
     card.appendChild(box);
   }
