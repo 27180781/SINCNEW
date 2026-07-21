@@ -98,7 +98,7 @@ function renderMappingGrid() {
   const maxOpts = Math.max(4, ...qs.map((q) => (q.options || []).length));
 
   const t = el('table');
-  let head = '<thead><tr><th>מס׳ שאלה</th>';
+  let head = '<thead><tr><th>מס׳ שאלה</th><th>טקסט השאלה (לזיהוי בלבד)</th>';
   for (let i = 1; i <= maxOpts; i++) head += `<th>תשובה ${i}</th>`;
   head += '<th></th></tr></thead>';
   t.innerHTML = head;
@@ -108,6 +108,11 @@ function renderMappingGrid() {
     tr.appendChild(el('td', {}, el('input', {
       type: 'number', value: q.queId ?? '', style: 'width:70px',
       oninput: (e) => { q.queId = e.target.value === '' ? null : Number(e.target.value); },
+    })));
+    // טקסט חופשי לשאלה — לזיהוי ע"י העורך בלבד (לא נשלח למשחק; טקסט השאלה חי במערכת המשחק)
+    tr.appendChild(el('td', {}, el('input', {
+      type: 'text', value: q.text || '', placeholder: 'תיאור קצר לזיהוי', style: 'min-width:180px',
+      oninput: (e) => { q.text = e.target.value; },
     })));
     for (let c = 0; c < maxOpts; c++) {
       if (!q.options[c]) q.options[c] = { answerId: c + 1, text: '', element: '', weight: 1 };
@@ -185,6 +190,38 @@ document.getElementById('downloadTemplateBtn').addEventListener('click', () => {
   const a = el('a', { href: URL.createObjectURL(blob), download: 'mapping-template.csv' });
   a.click();
   URL.revokeObjectURL(a.href);
+});
+
+document.getElementById('importMappingJsonBtn').addEventListener('click', () => {
+  const form = el('div');
+  form.appendChild(el('h2', {}, 'ייבוא מיפוי מ-JSON'));
+  form.appendChild(el('div', { class: 'muted-box' }, [
+    el('div', {}, 'מערך של שאלות. לכל שאלה: מספר שאלה, טקסט (לזיהוי), ושיוך כל תשובה ליסוד:'),
+    el('div', { style: 'margin-top:6px;font-family:monospace;font-size:.8rem;direction:ltr;text-align:left' },
+      '[{"question_id":"q7","question_text":"…","answers_mapping":{"1":"water","2":"fire","3":"earth","4":"air"}}]'),
+  ]));
+  const ta = el('textarea', { style: 'min-height:220px;direction:ltr;text-align:left', placeholder: '[ … ]' });
+  const mode = el('select');
+  mode.appendChild(el('option', { value: 'replace' }, 'החלפת כל המיפוי'));
+  mode.appendChild(el('option', { value: 'merge' }, 'מיזוג לפי מספר שאלה'));
+  form.appendChild(el('div', { class: 'field', style: 'margin-top:10px' }, ta));
+  form.appendChild(el('div', { class: 'field' }, [el('label', {}, 'אופן'), mode]));
+  form.appendChild(el('div', { class: 'row' }, [
+    el('button', { class: 'primary', onclick: async () => {
+      let arr;
+      try { arr = JSON.parse(ta.value); } catch { return toast('JSON לא תקין', true); }
+      if (!Array.isArray(arr)) return toast('נדרש מערך שאלות', true);
+      try {
+        const r = await api.post('/api/questions/import-mapping', { mapping: arr, mode: mode.value });
+        closeModal();
+        toast(`יובאו ${r.imported} שאלות (${r.mode === 'replace' ? 'החלפה' : 'מיזוג'})`);
+        if (r.warnings && r.warnings.length) alert('אזהרות:\n' + r.warnings.slice(0, 25).join('\n'));
+        loadMapping();
+      } catch (e) { toast(e.message, true); }
+    } }, 'ייבוא'),
+    el('button', { onclick: closeModal }, 'ביטול'),
+  ]));
+  openModal(form);
 });
 
 // ============================================================

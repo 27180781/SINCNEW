@@ -7,7 +7,7 @@ import { scoreBatch, matchPersonality, roundTo100, DEFAULT_ELEMENT_KEYS } from '
 import { buildSeedData, generatePersonalities, defaultSettings, buildSampleQuestions, newId } from './seed.js';
 import { validateGamePayload, gamePayloadToParticipants } from './game.js';
 import { parseXlsx } from './xlsx.js';
-import { parseCsv, rowsToQuestions } from './mapping.js';
+import { parseCsv, rowsToQuestions, mappingObjectsToQuestions } from './mapping.js';
 import { parsePersonalitiesInput } from './personalities-import.js';
 import { collectPhones, sendTzintuk, normalizePhone } from './tzintuk.js';
 import { sendMasaLink } from './masalink.js';
@@ -247,22 +247,8 @@ export function createRouter(repo) {
     return ok(clean);
   });
 
-  // ייבוא מיפוי יסודות מקובץ Excel/CSV (queId × תשובה→יסוד)
+  // ייבוא מיפוי יסודות מקובץ Excel/CSV (queId × תשובה→יסוד) או מ-JSON ({question_id, question_text, answers_mapping})
   add('POST', '/api/questions/import-mapping', async ({ body }) => {
-    let rows;
-    try {
-      if (Array.isArray(body.rows)) rows = body.rows;
-      else if (typeof body.csv === 'string') rows = parseCsv(body.csv);
-      else if (typeof body.dataBase64 === 'string') {
-        const buf = Buffer.from(body.dataBase64, 'base64');
-        // זיהוי xlsx (חתימת ZIP 'PK') מול csv טקסטואלי
-        if (buf[0] === 0x50 && buf[1] === 0x4b) rows = parseXlsx(buf);
-        else rows = parseCsv(buf.toString('utf8'));
-      } else return err('נדרש קובץ (dataBase64) או שדה rows/csv');
-    } catch (e) {
-      return err('כשל בקריאת הקובץ: ' + (e?.message || e));
-    }
-
     const settings = await repo.getSettings();
     const validKeys = elementKeysFrom(settings);
     const labelToKey = {};
@@ -272,7 +258,27 @@ export function createRouter(repo) {
     const existingByQueId = {};
     for (const q of existing) if (q.queId != null) existingByQueId[q.queId] = q;
 
-    const { questions, warnings } = rowsToQuestions(rows, { validKeys, labelToKey, existingByQueId });
+    let questions, warnings;
+    // פורמט JSON: מערך של { question_id, question_text, answers_mapping }
+    const mappingArr = Array.isArray(body.mapping) ? body.mapping : (Array.isArray(body) ? body : null);
+    if (mappingArr) {
+      ({ questions, warnings } = mappingObjectsToQuestions(mappingArr, { validKeys, labelToKey, existingByQueId }));
+    } else {
+      let rows;
+      try {
+        if (Array.isArray(body.rows)) rows = body.rows;
+        else if (typeof body.csv === 'string') rows = parseCsv(body.csv);
+        else if (typeof body.dataBase64 === 'string') {
+          const buf = Buffer.from(body.dataBase64, 'base64');
+          // זיהוי xlsx (חתימת ZIP 'PK') מול csv טקסטואלי
+          if (buf[0] === 0x50 && buf[1] === 0x4b) rows = parseXlsx(buf);
+          else rows = parseCsv(buf.toString('utf8'));
+        } else return err('נדרש קובץ (dataBase64) או שדה rows/csv/mapping');
+      } catch (e) {
+        return err('כשל בקריאת הקובץ: ' + (e?.message || e));
+      }
+      ({ questions, warnings } = rowsToQuestions(rows, { validKeys, labelToKey, existingByQueId }));
+    }
     if (!questions.length) return err('לא נמצאו שאלות תקינות בקובץ. ' + warnings.join(' '));
 
     const mode = body.mode === 'merge' ? 'merge' : 'replace';

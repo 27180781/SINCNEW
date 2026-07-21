@@ -6,7 +6,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { parseXlsx } from '../src/xlsx.js';
-import { parseCsv, rowsToQuestions, normalizeElement } from '../src/mapping.js';
+import { parseCsv, rowsToQuestions, normalizeElement, mappingObjectsToQuestions } from '../src/mapping.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LABELS = { אש: 'fire', מים: 'water', רוח: 'air', עפר: 'earth' };
@@ -82,4 +82,54 @@ test('parseXlsx + rowsToQuestions: הקובץ האמיתי -> 44 שאלות תק
   // כל האפשרויות עם יסוד תקין
   const bad = questions.flatMap((q) => q.options).filter((o) => !KEYS.includes(o.element));
   assert.equal(bad.length, 0);
+});
+
+test('mappingObjectsToQuestions: פורמט JSON עם question_id/question_text/answers_mapping', () => {
+  const items = [
+    { question_id: 'q7', question_text: 'באיזה דלת תבחר', answers_mapping: { '1': 'water', '2': 'fire', '3': 'earth', '4': 'air' } },
+    { question_id: 'q8', question_text: 'נטרול פצצה', answers_mapping: { '1': 'fire', '2': 'earth', '3': 'air', '4': 'water' } },
+  ];
+  const { questions, warnings } = mappingObjectsToQuestions(items, { validKeys: KEYS, labelToKey: LABELS });
+  assert.equal(warnings.length, 0);
+  assert.equal(questions.length, 2);
+  assert.equal(questions[0].queId, 7, 'q7 -> queId 7');
+  assert.equal(questions[0].id, 'q7');
+  assert.equal(questions[0].text, 'באיזה דלת תבחר');
+  assert.equal(questions[0].options.length, 4);
+  // answerId 1 -> water, וכו' (לפי סדר מספרי)
+  assert.deepEqual(questions[0].options.map((o) => [o.answerId, o.element]), [[1, 'water'], [2, 'fire'], [3, 'earth'], [4, 'air']]);
+});
+
+test('mappingObjectsToQuestions: מפתחות תשובה לא-ממוינים -> ממוינים לפי מספר', () => {
+  const items = [{ question_id: 'q9', answers_mapping: { '3': 'air', '1': 'fire', '4': 'water', '2': 'earth' } }];
+  const { questions } = mappingObjectsToQuestions(items, { validKeys: KEYS, labelToKey: LABELS });
+  assert.deepEqual(questions[0].options.map((o) => o.answerId), [1, 2, 3, 4]);
+  assert.deepEqual(questions[0].options.map((o) => o.element), ['fire', 'earth', 'air', 'water']);
+});
+
+test('mappingObjectsToQuestions: question_id ללא ספרות / יסוד לא מוכר -> אזהרות', () => {
+  const items = [
+    { question_id: 'xx', answers_mapping: { '1': 'fire' } },        // אין מספר -> דולג
+    { question_id: 'q5', answers_mapping: { '1': 'lava', '2': 'water' } }, // יסוד לא מוכר
+  ];
+  const { questions, warnings } = mappingObjectsToQuestions(items, { validKeys: KEYS, labelToKey: LABELS });
+  assert.equal(questions.length, 1);
+  assert.equal(questions[0].queId, 5);
+  assert.equal(questions[0].options[0].element, ''); // lava לא זוהה
+  assert.ok(warnings.some((w) => w.includes('question_id')));
+  assert.ok(warnings.some((w) => w.includes('lava')));
+});
+
+test('mappingObjectsToQuestions: תווית עברית ליסוד', () => {
+  const items = [{ question_id: 'q3', answers_mapping: { '1': 'אש', '2': 'מים', '3': 'רוח', '4': 'עפר' } }];
+  const { questions } = mappingObjectsToQuestions(items, { validKeys: KEYS, labelToKey: LABELS });
+  assert.deepEqual(questions[0].options.map((o) => o.element), ['fire', 'water', 'air', 'earth']);
+});
+
+test('mappingObjectsToQuestions: שמירת מזהה של שאלה קיימת (merge לפי queId)', () => {
+  const existingByQueId = { 7: { id: 'existing-id-7', text: 'טקסט קיים' } };
+  const items = [{ question_id: 'q7', answers_mapping: { '1': 'fire' } }]; // ללא question_text
+  const { questions } = mappingObjectsToQuestions(items, { validKeys: KEYS, labelToKey: LABELS, existingByQueId });
+  assert.equal(questions[0].id, 'existing-id-7', 'שומר מזהה קיים');
+  assert.equal(questions[0].text, 'טקסט קיים', 'שומר טקסט קיים כשלא סופק חדש');
 });

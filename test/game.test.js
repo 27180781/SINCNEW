@@ -135,3 +135,30 @@ test('validateGamePayload: ללא מטא-דאטה => מחרוזות ריקות',
   assert.equal(v.payload.email, '');
   assert.equal(v.payload.cloudinaryFolder, '');
 });
+
+test('resolveQuestion: עמיד ל-queId בסגנון "q7" (עם/בלי קידומת)', () => {
+  const qs = [
+    { id: 'q7', order: 1, queId: 7, options: [{ answerId: 1, element: 'water' }, { answerId: 2, element: 'fire' }] },
+    { id: 'q8', order: 2, queId: 8, options: [{ answerId: 1, element: 'fire' }, { answerId: 2, element: 'earth' }] },
+  ];
+  // המשחק שולח queId="q7" (עם קידומת) — צריך להתמפות לשאלה queId 7
+  const payload = validateGamePayload({
+    gameId: 'g', participants: [{ number: '1', answers: [{ queId: 'q7', answerId: 1 }, { queId: 'q8', answerId: 2 }] }],
+  }).payload;
+  const parts = gamePayloadToParticipants(payload, qs);
+  assert.equal(parts[0].answers.q7, 1);
+  assert.equal(parts[0].answers.q8, 2);
+  const res = scoreBatch(parts, qs, []);
+  // q7 answerId 1 -> water, q8 answerId 2 -> earth
+  assert.equal(res.results[0].counts.water, 1);
+  assert.equal(res.results[0].counts.earth, 1);
+});
+
+test('resolveQuestion: queId מספרי רגיל עדיין עובד', () => {
+  const qs = [{ id: 'q7', order: 1, queId: 7, options: [{ answerId: 1, element: 'water' }] }];
+  const payload = validateGamePayload({
+    gameId: 'g', participants: [{ number: '1', answers: [{ queId: 7, answerId: 1 }] }],
+  }).payload;
+  const parts = gamePayloadToParticipants(payload, qs);
+  assert.equal(parts[0].answers.q7, 1);
+});

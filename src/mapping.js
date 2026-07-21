@@ -102,3 +102,57 @@ export function rowsToQuestions(rows, opts = {}) {
   questions.forEach((q, i) => { q.order = i + 1; });
   return { questions, warnings };
 }
+
+/**
+ * ממיר מערך אובייקטי-מיפוי (JSON) לרשימת שאלות.
+ * פורמט כל פריט: { question_id: "q7", question_text: "…", answers_mapping: { "1":"water", … } }.
+ * question_id -> queId (החלק המספרי) + id; question_text -> טקסט לזיהוי; answers_mapping -> אפשרויות (answerId→יסוד).
+ */
+export function mappingObjectsToQuestions(items, opts = {}) {
+  const validKeys = opts.validKeys || ['fire', 'water', 'air', 'earth'];
+  const labelToKey = opts.labelToKey || {};
+  const existingByQueId = opts.existingByQueId || {};
+  const warnings = [];
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return { questions: [], warnings: ['לא התקבל מערך מיפוי'] };
+  }
+
+  const byQueId = new Map();
+  items.forEach((it, i) => {
+    if (!it || typeof it !== 'object') { warnings.push(`פריט ${i + 1}: אינו אובייקט — דולג`); return; }
+    const rawId = String(it.question_id ?? it.questionId ?? it.id ?? '').trim();
+    const digits = rawId.replace(/\D/g, '');
+    const queId = digits !== '' ? parseInt(digits, 10) : null;
+    if (queId == null) { warnings.push(`פריט ${i + 1}: אין מספר שאלה תקין (question_id="${rawId}") — דולג`); return; }
+    if (byQueId.has(queId)) warnings.push(`שאלה ${queId} מופיעה יותר מפעם אחת — נלקחה ההופעה האחרונה`);
+
+    const text = String(it.question_text ?? it.questionText ?? it.text ?? '').trim();
+    const mapping = it.answers_mapping ?? it.answersMapping ?? it.answers ?? {};
+    const options = [];
+    if (mapping && typeof mapping === 'object' && !Array.isArray(mapping)) {
+      // מיון מפתחות מספרית (1,2,3,4) — כדי לשמור על סדר האפשרויות
+      const keys = Object.keys(mapping).sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0));
+      for (const k of keys) {
+        const element = normalizeElement(mapping[k], validKeys, labelToKey);
+        if (!element) warnings.push(`שאלה ${queId}, תשובה ${k}: יסוד לא מוכר ("${mapping[k]}")`);
+        const answerId = parseInt(String(k).replace(/\D/g, ''), 10);
+        options.push({ answerId: Number.isFinite(answerId) ? answerId : null, text: '', element: element || '', weight: 1 });
+      }
+    } else {
+      warnings.push(`שאלה ${queId}: answers_mapping חסר או אינו אובייקט`);
+    }
+
+    const existing = existingByQueId[queId];
+    byQueId.set(queId, {
+      id: existing?.id || rawId || undefined, // שמירת מזהה קיים (יציבות) או שימוש ב-question_id
+      queId,
+      text: text || existing?.text || `שאלה ${queId}`,
+      options,
+    });
+  });
+
+  const questions = [...byQueId.values()];
+  questions.forEach((q, i) => { q.order = i + 1; });
+  return { questions, warnings };
+}

@@ -76,7 +76,15 @@ export function gamePayloadToParticipants(payload, questions) {
   const byQueId = new Map();
   for (const q of questions) if (q.queId != null) byQueId.set(String(q.queId), q);
   const ordered = questions.slice().sort((a, b) => (a.order || 0) - (b.order || 0));
-  const resolveQuestion = (queId) => byQueId.get(String(queId)) || ordered[Number(queId) - 1] || null;
+  // עמיד גם ל-queId בסגנון "q7" (המשחק עשוי לשלוח עם/בלי הקידומת): מתאים לפי מחרוזת, אז לפי הספרות בלבד, ואז לפי מיקום.
+  const resolveQuestion = (queId) => {
+    const s = String(queId ?? '').trim();
+    if (byQueId.has(s)) return byQueId.get(s);
+    const digits = s.replace(/\D/g, '');
+    if (digits !== '' && byQueId.has(digits)) return byQueId.get(digits);
+    const n = parseInt(digits, 10);
+    return Number.isFinite(n) ? (ordered[n - 1] || null) : null;
+  };
 
   return (payload.participants || []).map((gp) => {
     const answers = {};

@@ -47,12 +47,15 @@
           <div class="spacer"></div>
           <input type="file" id="mappingFile" accept=".xlsx,.csv" style="display:none" />
           <button class="primary" id="importMappingBtn">⬆ העלאת קובץ Excel/CSV</button>
+          <button id="importMappingJsonBtn">⬆ ייבוא JSON</button>
           <button id="downloadTemplateBtn" class="ghost">הורדת תבנית</button>
         </div>
         <p><small>כאן מוגדר <strong>רק המיפוי</strong>: לכל <strong>מספר שאלה</strong> (לפי הסדר שבמערכת המשחק),
-          איזה יסוד מייצגת כל תשובה. השאלות עצמן מוצגות במערכת המשחק.
-          מבנה הקובץ: עמודה ראשונה = מספר שאלה, ואחריה היסוד לכל תשובה (1, 2, 3, 4).
-          לדוגמה: <code>7 · water · fire · earth · air</code>. ערכים: <code>fire/water/air/earth</code> או <code>אש/מים/רוח/עפר</code>.</small></p>
+          איזה יסוד מייצגת כל תשובה. אפשר להוסיף <strong>טקסט חופשי לשאלה</strong> — לזיהוי בלבד עבור העורך
+          (השאלות עצמן מוצגות במערכת המשחק).
+          מבנה קובץ Excel/CSV: עמודה ראשונה = מספר שאלה, ואחריה היסוד לכל תשובה (1, 2, 3, 4).
+          לדוגמה: <code>7 · water · fire · earth · air</code>. ערכים: <code>fire/water/air/earth</code> או <code>אש/מים/רוח/עפר</code>.<br />
+          מבנה JSON: <code>[{"question_id":"q7","question_text":"…","answers_mapping":{"1":"water","2":"fire","3":"earth","4":"air"}}]</code></small></p>
       </div>
       <div class="card">
         <div class="row">
