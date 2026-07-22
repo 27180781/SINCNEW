@@ -74,14 +74,25 @@ async function checkRepo(repo) {
   assert.ok(search.total > 0, 'חיפוש "טהור" מחזיר תוצאות');
   assert.ok(search.items.every((p) => p.name.includes('טהור') || (p.description || '').includes('טהור')));
 
-  // סוג אישיות — CRUD
-  const p = { id: 'ptest', name: 'בדיקה', description: 'תיאור', profile: { fire: 40, water: 30, air: 20, earth: 10 }, generated: false };
+  // סוג אישיות — CRUD (כולל variantTexts — טקסטי גרסאות)
+  const p = { id: 'ptest', name: 'בדיקה', description: 'תיאור', profile: { fire: 40, water: 30, air: 20, earth: 10 }, generated: false, variantTexts: { girls: { name: 'בדיקה נקבה', description: 'תיאור נקבה' } } };
   await repo.addPersonality(p);
   assert.equal(await repo.countPersonalities(), 287);
   assert.equal((await repo.getPersonality('ptest')).profile.fire, 40);
-  await repo.updatePersonality('ptest', { ...p, name: 'עודכן' });
-  assert.equal((await repo.getPersonality('ptest')).name, 'עודכן');
+  assert.deepEqual((await repo.getPersonality('ptest')).variantTexts, { girls: { name: 'בדיקה נקבה', description: 'תיאור נקבה' } }, 'variantTexts שורד add');
+  await repo.updatePersonality('ptest', { ...p, name: 'עודכן', variantTexts: { girls: { name: 'ע', description: 'ת' }, kids: { name: 'ילד', description: '' } } });
+  const upP = await repo.getPersonality('ptest');
+  assert.equal(upP.name, 'עודכן');
+  assert.deepEqual(upP.variantTexts.kids, { name: 'ילד', description: '' }, 'variantTexts שורד update');
+  // setPersonalities שומר variantTexts (הנתיב של ייבוא גרסה)
+  await repo.setPersonalities([{ id: 'sv', name: 'sv', description: '', profile: { fire: 100, water: 0, air: 0, earth: 0 }, generated: false, variantTexts: { girls: { name: 'נ', description: 'ד' } } }]);
+  assert.deepEqual((await repo.getPersonality('sv')).variantTexts, { girls: { name: 'נ', description: 'ד' } }, 'variantTexts שורד setPersonalities');
+  await repo.setPersonalities([]); // ניקוי לפני המשך הבדיקות
+  await repo.addPersonality(p);
   assert.equal(await repo.deletePersonality('ptest'), true);
+  assert.equal(await repo.countPersonalities(), 0);
+  // שחזור מצב הזרע לבדיקות ההמשך (286 סוגים)
+  await repo.setPersonalities((await import('../src/seed.js')).generatePersonalities(10));
   assert.equal(await repo.countPersonalities(), 286);
 
   // append / set / clear

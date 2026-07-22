@@ -44,6 +44,8 @@ function detectColumns(header, keys, keyToLabel) {
 export function rowsToPersonalities(rows, opts = {}) {
   const keys = opts.keys && opts.keys.length ? opts.keys : ['fire', 'water', 'air', 'earth'];
   const keyToLabel = opts.keyToLabel || { fire: 'אש', water: 'מים', air: 'רוח', earth: 'עפר' };
+  const nameFallback = opts.nameFallback !== false;   // false => שם ריק נשאר ריק (לייבוא גרסה)
+  const requireProfile = opts.requireProfile !== false; // false => שורה ללא אחוזים לא מדולגת (ייבוא גרסה)
   const warnings = [];
   if (!Array.isArray(rows) || rows.length === 0) return { personalities: [], warnings: ['הקובץ ריק'] };
 
@@ -74,14 +76,14 @@ export function rowsToPersonalities(rows, opts = {}) {
     const profile = {};
     let sum = 0;
     for (const k of keys) { const v = toPct(row[cols.elements[k]]); profile[k] = v; sum += v; }
-    if (sum <= 0) { warnings.push(`שורה ${i + 1}: כל האחוזים 0 — דולגה`); continue; }
+    if (sum <= 0 && requireProfile) { warnings.push(`שורה ${i + 1}: כל האחוזים 0 — דולגה`); continue; }
 
     // דומיננטי (לשם ברירת מחדל)
     let dom = keys[0];
     for (const k of keys) if (profile[k] > profile[dom]) dom = k;
 
     let name = String(row[cols.name] ?? '').trim();
-    if (!name) name = number != null ? `${keyToLabel[dom]} ${number}` : keyToLabel[dom];
+    if (!name && nameFallback) name = number != null ? `${keyToLabel[dom]} ${number}` : keyToLabel[dom];
 
     const description = String(row[cols.description] ?? '').trim();
 

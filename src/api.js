@@ -11,6 +11,7 @@ import { parseCsv, rowsToQuestions, mappingObjectsToQuestions } from './mapping.
 import { parsePersonalitiesInput } from './personalities-import.js';
 import { collectPhones, sendTzintuk, normalizePhone } from './tzintuk.js';
 import { sendMasaLink } from './masalink.js';
+import { sanitizeVariants, resolveVariant, applyVariantToMatch } from './variants.js';
 import { findLatestParticipantByPhone, buildIntroText, toYemotRead, toYemotIdList } from './intro.js';
 import { assignPersonalCodes, findByPersonalCode, findByPhone, computeInsights } from './insights.js';
 
@@ -170,7 +171,23 @@ function sanitizePersonality(input, keys) {
     description: String(input.description || '').trim(),
     profile,
     generated: !!input.generated,
+    variantTexts: sanitizeVariantTexts(input.variantTexts),
   };
+}
+
+// ולידציה של טקסטי הגרסאות של סוג אישיות: { [variantId]: { name, description } }
+function sanitizeVariantTexts(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+  const out = {};
+  for (const [vid, val] of Object.entries(input)) {
+    if (!val || typeof val !== 'object') continue;
+    const key = String(vid).slice(0, 40);
+    const name = String(val.name ?? '').trim().slice(0, 200);
+    const description = String(val.description ?? '').trim().slice(0, 5000);
+    if (!name && !description) continue; // דילוג על ערך ריק
+    out[key] = { name, description };
+  }
+  return out;
 }
 
 export function createRouter(repo) {
@@ -193,6 +210,7 @@ export function createRouter(repo) {
       matching: { ...cur.matching, ...(body.matching || {}) },
       notify: body.notify ? sanitizeNotify(body.notify, cur.notify) : (cur.notify || sanitizeNotify(null)),
       masaLink: body.masaLink ? sanitizeMasaLink(body.masaLink, cur.masaLink) : (cur.masaLink || sanitizeMasaLink(null)),
+      variants: Array.isArray(body.variants) ? sanitizeVariants(body.variants, cur.variants) : (cur.variants || []),
     };
     await repo.saveSettings(next);
     return ok(next);
@@ -384,20 +402,51 @@ export function createRouter(repo) {
   });
 
   // ייבוא סוגי אישיות מקובץ Excel/CSV (מספר · שם · אחוזי יסודות · תיאור מלא)
+  // עם body.variant — מעדכן רק את טקסט הגרסה (שם/תיאור) לפי מספר האישיות, ללא נגיעה בפרופילים.
   add('POST', '/api/personalities/import-file', async ({ body }) => {
     const settings = await repo.getSettings();
     const keys = elementKeysFrom(settings);
     const keyToLabel = {};
     for (const el of settings.elements || []) keyToLabel[el.key] = el.label;
 
+    const variant = String(body.variant || '').trim();
+    const isVariant = !!variant;
+
     let parsed;
     try {
-      parsed = parsePersonalitiesInput(body, parseXlsx, { keys, keyToLabel });
+      // ייבוא גרסה: שם ריק נשאר ריק, ואחוזים אינם חובה (מעדכנים רק טקסט)
+      parsed = parsePersonalitiesInput(body, parseXlsx, {
+        keys, keyToLabel, nameFallback: !isVariant, requireProfile: !isVariant,
+      });
     } catch (e) {
       return err('כשל בקריאת הקובץ: ' + (e?.message || e));
     }
     const { personalities, warnings } = parsed;
     if (!personalities.length) return err('לא נמצאו סוגי אישיות תקינים בקובץ. ' + warnings.join(' '));
+
+    // ---- ייבוא לגרסה: עדכון טקסט (שם/תיאור) לפי מספר האישיות ----
+    if (isVariant) {
+      if (!(settings.variants || []).some((v) => v.id === variant)) return err(`גרסה לא מוכרת: ${variant}`, 400);
+      const all = await repo.allPersonalities();
+      const byNumber = new Map();
+      for (const p of all) if (p.number != null) byNumber.set(Number(p.number), p);
+      let updated = 0;
+      const missing = [];
+      for (const src of personalities) {
+        if (src.number == null) continue;
+        const p = byNumber.get(Number(src.number));
+        if (!p) { missing.push(src.number); continue; }
+        const name = String(src.name || '').trim();
+        const description = String(src.description || '').trim();
+        if (!name && !description) continue; // אין מה לעדכן לשורה זו
+        p.variantTexts = { ...(p.variantTexts || {}), [variant]: { name, description } };
+        updated += 1;
+      }
+      await repo.setPersonalities(all);
+      const w = [...warnings];
+      if (missing.length) w.push(`לא נמצאו סוגי אישיות עם המספרים: ${missing.slice(0, 20).join(', ')}`);
+      return ok({ variant, updated, total: all.length, warnings: w }, 201);
+    }
 
     const clean = personalities.map((p) => sanitizePersonality(p, keys));
     // השלמת מספרים סידוריים לחסרים (ממשיך מהמקסימום הקיים במצב append)
@@ -538,6 +587,17 @@ export function createRouter(repo) {
     const gameById = new Map(participants.map((p) => [p.id, p.game]));
     for (const r of result.results) if (gameById.has(r.id)) r.game = gameById.get(r.id);
 
+    // גרסת אפיון לפי שם המשחק — מחליפה רק את הטקסט (שם/תיאור) של ההתאמה, לפי מספר האישיות.
+    // הפרופיל, ההתאמה ומספר קובץ השמע נשארים זהים לכל הגרסאות.
+    const variantId = resolveVariant(game.gameName, settings.variants);
+    entry.variant = variantId; // null = ברירת מחדל
+    if (variantId) {
+      const persById = new Map(personalities.map((p) => [p.id, p]));
+      for (const r of result.results) {
+        if (r.match) r.match = applyVariantToMatch(r.match, persById.get(r.match.id), variantId);
+      }
+    }
+
     // הקצאת קוד אישי למשתתפים ללא טלפון תקין (רק שם) — כדי שיוכלו לקבל תוצאה לפי הקוד
     const existingBatches = await repo.allBatches();
     assignPersonalCodes(result.results, existingBatches);
@@ -554,6 +614,7 @@ export function createRouter(repo) {
       game: {
         gameId: game.gameId, gameName: game.gameName, sentAt: game.sentAt,
         email: game.email || null, cloudinaryFolder: game.cloudinaryFolder || null,
+        variantId: variantId || null, // גרסת האפיון שנבחרה לפי שם המשחק (נשמר בתוך game)
         participantCount: game.participantCount, questions: game.questions, groups: game.groups,
       },
       participants,

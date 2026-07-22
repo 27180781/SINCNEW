@@ -21,6 +21,9 @@ export function defaultSettings() {
     matching: { metric: 'euclidean', topN: 3 },
     // צינתוק אוטומטי (ימות המשיח) בסיום קליטת תוצאות משחק — כבוי כברירת מחדל
     notify: { enabled: false, callerId: '', tzintukTimeOut: 9, onlyAnswered: true },
+    // גרסאות אפיון — ערכות טקסט חלופיות הנבחרות לפי מילת-מפתח בשם המשחק (gameName).
+    // לדוגמה: [{ id:'girls', label:'בנות', matchText:'לבנות' }]. ריק = תמיד ברירת המחדל.
+    variants: [],
     // MasaLink — שליחת אוטומציה ב-Inforu (מייל למפעיל עם קישור לעמוד התוצאות) — כבוי כברירת מחדל
     // הפרטים הרגישים (Username/Token) מוזנים בפאנל הניהול / משתני סביבה, לא בקוד.
     masaLink: {

@@ -297,6 +297,26 @@ function editPersonality(p) {
   form.appendChild(el('label', {}, 'פרופיל היסודות (אחוזים)'));
   form.appendChild(grid);
   form.appendChild(el('div', { class: 'muted-box' }, [el('span', {}, 'סכום: '), sumLabel]));
+
+  // טקסטי גרסאות (אם הוגדרו גרסאות) — שם/תיאור חלופיים לפי גרסה
+  const variantInputs = {};
+  const variants = (state.settings?.variants) || [];
+  if (variants.length) {
+    form.appendChild(el('label', { style: 'margin-top:8px' }, '🎭 טקסט לפי גרסה (ריק = משתמש בברירת המחדל)'));
+    variants.forEach((v) => {
+      const vt = (data.variantTexts && data.variantTexts[v.id]) || {};
+      const nameV = el('input', { value: vt.name || '', placeholder: 'שם (ריק = ברירת מחדל)' });
+      const descV = el('textarea', { style: 'min-height:50px;font-family:inherit', value: vt.description || '' });
+      descV.value = vt.description || '';
+      variantInputs[v.id] = { nameV, descV };
+      form.appendChild(el('div', { class: 'card', style: 'padding:12px' }, [
+        el('div', { style: 'font-weight:700;margin-bottom:6px' }, `גרסה: ${v.label || v.id}`),
+        el('div', { class: 'field' }, [el('label', {}, 'שם'), nameV]),
+        el('div', { class: 'field', style: 'margin:0' }, [el('label', {}, 'תיאור'), descV]),
+      ]));
+    });
+  }
+
   form.appendChild(el('div', { class: 'row', style: 'margin-top:12px' }, [
     el('button', { class: 'primary', onclick: save }, 'שמירה'),
     el('button', { onclick: closeModal }, 'ביטול'),
@@ -318,6 +338,14 @@ function editPersonality(p) {
       description: descI.value.trim(),
       profile,
     };
+    // טקסטי גרסאות: משמרים את הקיים ומעדכנים לפי מה שהוזן
+    const variantTexts = { ...(data.variantTexts || {}) };
+    for (const [vid, { nameV, descV }] of Object.entries(variantInputs)) {
+      const nm = nameV.value.trim(); const ds = descV.value.trim();
+      if (nm || ds) variantTexts[vid] = { name: nm, description: ds };
+      else delete variantTexts[vid];
+    }
+    payload.variantTexts = variantTexts;
     if (!payload.name) return toast('שם חסר', true);
     try {
       if (isNew) await api.post('/api/personalities', payload);
@@ -375,7 +403,7 @@ document.getElementById('clearPersBtn').addEventListener('click', async () => {
   } catch (e) { toast(e.message, true); }
 });
 
-document.getElementById('importPersFileBtn').addEventListener('click', () => {
+document.getElementById('importPersFileBtn').addEventListener('click', async () => {
   const form = el('div');
   form.appendChild(el('h2', {}, 'העלאת סוגי אישיות מקובץ Excel/CSV'));
   form.appendChild(el('div', { class: 'muted-box' }, [
@@ -387,8 +415,22 @@ document.getElementById('importPersFileBtn').addEventListener('click', () => {
   const mode = el('select');
   mode.appendChild(el('option', { value: 'replace' }, 'החלפת המאגר הקיים'));
   mode.appendChild(el('option', { value: 'append' }, 'הוספה למאגר הקיים'));
+  // בחירת יעד: המאגר הראשי (ברירת מחדל) או גרסה — לגרסה מעדכנים רק שם/תיאור לפי מספר האישיות
+  const target = el('select');
+  target.appendChild(el('option', { value: '' }, 'המאגר הראשי (ברירת מחדל)'));
+  const s = state.settings || (state.settings = await api.get('/api/settings').catch(() => ({})));
+  (s.variants || []).forEach((v) => target.appendChild(el('option', { value: v.id }, `גרסה: ${v.label || v.id}`)));
+  const modeField = el('div', { class: 'field' }, [el('label', {}, 'אופן'), mode]);
+  const targetNote = el('div', { class: 'muted-box', style: 'display:none' }, 'ייבוא לגרסה: מעדכן רק את השם והתיאור לפי מספר האישיות (האחוזים נשמרים מהמאגר הראשי).');
+  target.addEventListener('change', () => {
+    const isVariant = !!target.value;
+    modeField.style.display = isVariant ? 'none' : '';
+    targetNote.style.display = isVariant ? '' : 'none';
+  });
   form.appendChild(el('div', { class: 'field', style: 'margin-top:12px' }, [el('label', {}, 'קובץ (xlsx / csv)'), file]));
-  form.appendChild(el('div', { class: 'field' }, [el('label', {}, 'אופן'), mode]));
+  form.appendChild(el('div', { class: 'field' }, [el('label', {}, 'יעד'), target]));
+  form.appendChild(targetNote);
+  form.appendChild(modeField);
   const status = el('div', { style: 'margin:8px 0;color:var(--muted)' });
   form.appendChild(status);
   form.appendChild(el('div', { class: 'row' }, [
@@ -398,10 +440,11 @@ document.getElementById('importPersFileBtn').addEventListener('click', () => {
       status.textContent = 'מעלה ומעבד…';
       try {
         const dataBase64 = await fileToBase64(f);
-        const r = await api.post('/api/personalities/import-file', { dataBase64, mode: mode.value });
+        const payload = target.value ? { dataBase64, variant: target.value } : { dataBase64, mode: mode.value };
+        const r = await api.post('/api/personalities/import-file', payload);
         closeModal();
-        toast(`יובאו ${r.imported} סוגי אישיות`);
-        if (r.warnings && r.warnings.length) console.warn('אזהרות ייבוא:', r.warnings);
+        toast(target.value ? `עודכנו ${r.updated} סוגים בגרסה` : `יובאו ${r.imported} סוגי אישיות`);
+        if (r.warnings && r.warnings.length) alert('אזהרות:\n' + r.warnings.slice(0, 25).join('\n'));
         state.persPage = 0; loadPersonalities();
       } catch (e) { status.textContent = ''; toast(e.message, true); }
     } }, 'ייבוא'),
@@ -734,6 +777,11 @@ function renderInboxEntry(e) {
       `${e.participantCount ?? '?'} משתתפים · ${e.method} · ${new Date(e.receivedAt).toLocaleString('he-IL')}`),
   ]));
   if (e.error) card.appendChild(el('div', { class: 'muted-box', style: 'color:#b91c1c;margin-top:8px' }, 'שגיאה: ' + e.error));
+  // גרסת אפיון שנבחרה לפי שם המשחק
+  if (e.variant) {
+    const vlabel = ((state.settings?.variants) || []).find((v) => v.id === e.variant)?.label || e.variant;
+    card.appendChild(el('div', { class: 'muted-box', style: 'margin-top:8px' }, `🎭 גרסת אפיון: ${vlabel}`));
+  }
   // מטא-דאטה של מפעיל המשחק (נשמר לטיפול בהמשך)
   if (e.email || e.cloudinaryFolder) {
     const meta = el('div', { class: 'muted-box', style: 'margin-top:8px' }, [el('strong', {}, '📎 נשמר לטיפול בהמשך: ')]);
@@ -851,6 +899,10 @@ async function loadSettings() {
     mb.style.color = '#fff';
   } catch { /* לא קריטי */ }
 
+  // גרסאות אפיון
+  state.variants = (s.variants || []).map((v) => ({ ...v }));
+  renderVariants();
+
   const ed = document.getElementById('elementsEditor');
   ed.innerHTML = '';
   (s.elements || []).forEach((e, i) => {
@@ -863,6 +915,39 @@ async function loadSettings() {
     ed.appendChild(card);
   });
 }
+
+// ---- גרסאות אפיון ----
+function newVariantId() { return 'v_' + Math.random().toString(36).slice(2, 9); }
+function renderVariants() {
+  const box = document.getElementById('variantsEditor');
+  box.innerHTML = '';
+  const list = state.variants || [];
+  if (!list.length) { box.appendChild(el('div', { class: 'empty', style: 'padding:12px' }, 'אין גרסאות. הוסף גרסה כדי לתמוך בכמה נוסחי אפיון (למשל זכר/נקבה).')); return; }
+  list.forEach((v, i) => {
+    const row = el('div', { class: 'row', style: 'border-bottom:1px solid var(--line);padding:8px 0;gap:8px' }, [
+      el('div', { class: 'field', style: 'flex:1;margin:0' }, [el('label', {}, 'תווית'),
+        el('input', { value: v.label || '', placeholder: 'למשל בנות', oninput: (e) => { v.label = e.target.value; } })]),
+      el('div', { class: 'field', style: 'flex:2;margin:0' }, [el('label', {}, 'מילות זיהוי בשם המשחק (מופרד בפסיקים)'),
+        el('input', { value: v.matchText || '', placeholder: 'למשל לבנות, נשים', oninput: (e) => { v.matchText = e.target.value; } })]),
+      el('button', { class: 'small danger', title: 'מחיקת גרסה', onclick: () => { state.variants.splice(i, 1); renderVariants(); } }, '✕'),
+    ]);
+    box.appendChild(row);
+  });
+}
+document.getElementById('addVariantBtn').addEventListener('click', () => {
+  state.variants = state.variants || [];
+  state.variants.push({ id: newVariantId(), label: '', matchText: '' });
+  renderVariants();
+});
+document.getElementById('saveVariantsBtn').addEventListener('click', async () => {
+  const variants = (state.variants || []).map((v) => ({ id: v.id || newVariantId(), label: (v.label || '').trim(), matchText: (v.matchText || '').trim() }));
+  try {
+    state.settings = await api.put('/api/settings', { variants });
+    state.variants = (state.settings.variants || []).map((v) => ({ ...v }));
+    renderVariants();
+    toast('הגרסאות נשמרו');
+  } catch (e) { toast(e.message, true); }
+});
 
 document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
   const s = state.settings;
@@ -966,7 +1051,7 @@ const loaders = {
   dashboard: loadDashboard,
   mapping: loadMapping,
   inbox: loadInbox,
-  personalities: () => loadPersonalities(),
+  personalities: () => { if (!state.settings) api.get('/api/settings').then((s) => { state.settings = s; }).catch(() => {}); loadPersonalities(); },
   participants: () => { renderFormatHelp(); loadIntegration(); buildSimElements(); loadBatches(); if (!state.questions.length) api.get('/api/questions').then((q) => { state.questions = q; }); },
   settings: loadSettings,
 };
