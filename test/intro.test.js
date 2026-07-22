@@ -86,3 +86,20 @@ test('findLatestParticipantByPhone: מאתר לפי טלפון ובוחר את �
   // טלפון לא תקין
   assert.equal(findLatestParticipantByPhone(batches, 'abc'), null);
 });
+
+test('findLatestParticipantByPhone: השתתפות מאוחרת וריקה לא מסתירה תוצאה קודמת עם מענה', () => {
+  const batches = [
+    { createdAt: '2024-01-01T00:00:00Z', result: { results: [{ id: '1', game: { number: '0501234567' }, answered: 4, counts: { fire: 4 }, percentages: { fire: 100 } }] } },
+    { createdAt: '2024-06-01T00:00:00Z', result: { results: [{ id: '1', game: { number: '0501234567' }, answered: 0, counts: {}, percentages: {} }] } },
+  ];
+  const r = findLatestParticipantByPhone(batches, '0501234567');
+  assert.equal(r.answered, 4, 'מוחזרת התוצאה עם המענה ולא הריקה המאוחרת');
+});
+
+test('findLatestParticipantByPhone: מבין שתי תוצאות עם מענה — האחרונה', () => {
+  const batches = [
+    { createdAt: '2024-01-01T00:00:00Z', result: { results: [{ id: '1', game: { number: '0501234567' }, answered: 4, percentages: { fire: 100 } }] } },
+    { createdAt: '2024-06-01T00:00:00Z', result: { results: [{ id: '1', game: { number: '0501234567' }, answered: 3, percentages: { water: 100 } }] } },
+  ];
+  assert.equal(findLatestParticipantByPhone(batches, '0501234567').percentages.water, 100);
+});

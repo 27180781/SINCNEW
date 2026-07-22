@@ -31,6 +31,23 @@ document.getElementById('tabs').addEventListener('click', (e) => {
 //  לוח בקרה
 // ============================================================
 async function loadDashboard() {
+  // חיווי אחסון — כדי לוודא שהתוצאות נשמרות ב-PostgreSQL (קבוע) ולא בקובץ זמני
+  const box = document.getElementById('storageInfo');
+  box.innerHTML = '';
+  try {
+    const h = await api.get('/api/health');
+    const isPg = h.storage === 'postgres';
+    box.appendChild(el('div', {
+      class: 'muted-box',
+      style: `display:flex;align-items:center;gap:10px;border-color:${isPg ? 'var(--earth)' : '#e0b000'};background:${isPg ? '#f2f8ee' : '#fff8e6'};color:var(--ink)`,
+    }, [
+      el('span', { style: 'font-size:1.3rem' }, isPg ? '🗄️' : '⚠️'),
+      isPg
+        ? el('span', {}, [el('strong', {}, 'אחסון: PostgreSQL '), el('span', {}, '— התוצאות נשמרות לצמיתות (טלפון + עמוד אישי).')])
+        : el('span', {}, [el('strong', { style: 'color:#b26a00' }, 'אחסון: קובץ JSON (זמני!) '), el('span', {}, '— בקפרובר הנתונים עלולים להימחק בפריסה. הגדר DATABASE_URL כדי לשמור ב-PostgreSQL.')]),
+    ]));
+  } catch { /* לא קריטי */ }
+
   const s = await api.get('/api/stats');
   const cards = document.getElementById('statCards');
   cards.innerHTML = '';

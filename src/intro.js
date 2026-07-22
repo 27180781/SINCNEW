@@ -5,21 +5,27 @@
 
 import { normalizePhone } from './tzintuk.js';
 
-/** מאתר את התוצאה האחרונה (המפגש העדכני ביותר) של מספר טלפון נתון. */
+/**
+ * מאתר את התוצאה של מספר טלפון נתון.
+ * מעדיף את המפגש העדכני ביותר שבו המשתתף **ענה** (answered>0), כדי שהשתתפות
+ * מאוחרת וריקה לא "תסתיר" תוצאה טובה קודמת. אם אין אף תוצאה עם מענה — מוחזר האחרון שנמצא.
+ */
 export function findLatestParticipantByPhone(batches, phoneRaw) {
   const phone = normalizePhone(phoneRaw);
   if (!phone) return null;
-  let best = null;
+  let bestAnswered = null;
+  let bestAny = null;
   for (const b of batches || []) {
     for (const r of b.result?.results || []) {
       const rn = normalizePhone(r.game?.number ?? r.id);
       if (rn && rn === phone) {
         const ts = Date.parse(b.createdAt || '') || 0;
-        if (!best || ts >= best.ts) best = { ts, r };
+        if (!bestAny || ts >= bestAny.ts) bestAny = { ts, r };
+        if ((r.answered || 0) > 0 && (!bestAnswered || ts >= bestAnswered.ts)) bestAnswered = { ts, r };
       }
     }
   }
-  return best?.r || null;
+  return (bestAnswered || bestAny)?.r || null;
 }
 
 /**

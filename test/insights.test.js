@@ -105,3 +105,11 @@ test('computeInsights: מדלג על עצמי בחישוב הקרוב ביותר
   assert.equal(ins.group.same, 1);
   assert.equal(ins.group.percent, 100);
 });
+
+test('findByPhone: מעדיף את התוצאה האחרונה עם מענה (ריק מאוחר לא מסתיר)', () => {
+  const batches = [
+    { createdAt: '2024-01-01T00:00:00Z', result: { results: [R({ phone: '0502222222', name: 'טוב', pct: { fire: 100 }, dominant: 'fire', answered: 4 })] } },
+    { createdAt: '2024-06-01T00:00:00Z', result: { results: [R({ phone: '0502222222', name: 'ריק', pct: {}, dominant: null, answered: 0 })] } },
+  ];
+  assert.equal(findByPhone(batches, '0502222222').result.name, 'טוב');
+});

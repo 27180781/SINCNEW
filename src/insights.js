@@ -33,18 +33,24 @@ export function assignPersonalCodes(results, existingBatches, base = 1000) {
   return results;
 }
 
-/** איתור התוצאה העדכנית ביותר לפי predicate — מחזיר גם את המפגש. */
+/**
+ * איתור תוצאה לפי predicate — מחזיר גם את המפגש.
+ * מעדיף את המפגש העדכני ביותר שבו המשתתף **ענה** (answered>0), כדי שהשתתפות
+ * מאוחרת וריקה לא תסתיר תוצאה קודמת. אם אין תוצאה עם מענה — מוחזר האחרון שנמצא.
+ */
 export function findLatest(batches, matchFn) {
-  let best = null;
+  let bestAnswered = null;
+  let bestAny = null;
   for (const b of batches || []) {
     for (const r of b.result?.results || []) {
       if (matchFn(r)) {
         const ts = Date.parse(b.createdAt || '') || 0;
-        if (!best || ts >= best.ts) best = { ts, result: r, batch: b };
+        if (!bestAny || ts >= bestAny.ts) bestAny = { ts, result: r, batch: b };
+        if ((r.answered || 0) > 0 && (!bestAnswered || ts >= bestAnswered.ts)) bestAnswered = { ts, result: r, batch: b };
       }
     }
   }
-  return best; // { result, batch } | null
+  return bestAnswered || bestAny; // { result, batch } | null
 }
 
 /** איתור תוצאה לפי קוד אישי (המפגש העדכני ביותר). */
