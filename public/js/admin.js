@@ -228,6 +228,7 @@ document.getElementById('importMappingJsonBtn').addEventListener('click', () => 
 //  סוגי אישיות
 // ============================================================
 async function loadPersonalities() {
+  if (!state.settings) { try { state.settings = await api.get('/api/settings'); } catch { /* לא קריטי */ } }
   const offset = state.persPage * state.persLimit;
   const qs = new URLSearchParams({ limit: state.persLimit, offset, search: state.persSearch });
   const data = await api.get(`/api/personalities?${qs}`);
@@ -239,14 +240,32 @@ async function loadPersonalities() {
   document.getElementById('persCount').textContent = data.total;
   const list = document.getElementById('personalitiesList');
   list.innerHTML = '';
+  const variants = (state.settings?.variants) || [];
   const t = el('table');
   t.innerHTML = '<thead><tr><th>מס׳</th><th>שם</th><th>פרופיל</th><th>אחוזים</th><th></th></tr></thead>';
   const tb = el('tbody');
   data.items.forEach((p) => {
     const pct = ELEMENT_ORDER.map((k) => `${elEmoji(k)}${p.profile[k] || 0}`).join(' · ');
+    // תגיות גרסאות: לכל גרסה שיש לה טקסט לסוג הזה — תגית עם תצוגה מקדימה בריחוף, ולחיצה פותחת עריכה
+    const vBadges = [];
+    for (const v of variants) {
+      const vt = p.variantTexts && p.variantTexts[v.id];
+      if (vt && (vt.name || vt.description)) {
+        const preview = `${v.label || v.id}\nשם: ${vt.name || '(ברירת מחדל)'}\n${(vt.description || '').slice(0, 400)}`;
+        vBadges.push(el('span', {
+          class: 'badge', title: preview,
+          style: 'background:#efe9ff;color:#6b4fd6;cursor:pointer;margin-inline-end:4px',
+          onclick: () => editPersonality(p),
+        }, `🎭 ${v.label || v.id}`));
+      }
+    }
     tb.appendChild(el('tr', {}, [
       el('td', {}, el('span', { class: 'badge' }, p.number != null ? String(p.number) : '—')),
-      el('td', {}, [el('strong', {}, p.name), el('div', {}, el('small', {}, p.description || ''))]),
+      el('td', {}, [
+        el('strong', {}, p.name),
+        el('div', {}, el('small', {}, p.description || '')),
+        vBadges.length ? el('div', { style: 'margin-top:5px' }, vBadges) : null,
+      ]),
       el('td', {}, miniProfile(p.profile)),
       el('td', {}, el('small', {}, pct)),
       el('td', {}, el('div', { class: 'row' }, [
@@ -1051,7 +1070,7 @@ const loaders = {
   dashboard: loadDashboard,
   mapping: loadMapping,
   inbox: loadInbox,
-  personalities: () => { if (!state.settings) api.get('/api/settings').then((s) => { state.settings = s; }).catch(() => {}); loadPersonalities(); },
+  personalities: () => loadPersonalities(),
   participants: () => { renderFormatHelp(); loadIntegration(); buildSimElements(); loadBatches(); if (!state.questions.length) api.get('/api/questions').then((q) => { state.questions = q; }); },
   settings: loadSettings,
 };
