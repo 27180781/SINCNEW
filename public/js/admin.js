@@ -756,6 +756,7 @@ async function loadBatches() {
     box.appendChild(el('div', { class: 'row', style: 'border-bottom:1px solid var(--line);padding:6px 0' }, [
       el('div', {}, [
         b.source === 'game' ? el('span', { class: 'badge', title: 'התקבל ממערכת המשחק' }, '🎮 משחק') : null,
+        b.source === 'import' ? el('span', { class: 'badge', style: 'background:#e6f0ff;color:#2a5db0', title: 'יובא ממערכת אחרת' }, '📥 ייבוא') : null,
         el('strong', { style: 'margin-inline-start:6px' }, b.name),
         el('div', {}, el('small', {}, `${b.count} משתתפים · ${new Date(b.createdAt).toLocaleDateString('he-IL')}`)),
       ]),
@@ -773,6 +774,42 @@ async function viewBatch(id) {
   document.getElementById('downloadResultsBtn').disabled = false;
   document.getElementById('scoreResults').scrollIntoView({ behavior: 'smooth' });
 }
+
+document.getElementById('importResultsBtn').addEventListener('click', () => {
+  const form = el('div');
+  form.appendChild(el('h2', {}, 'ייבוא תוצאות קיימות (CSV)'));
+  form.appendChild(el('div', { class: 'muted-box' }, [
+    el('div', {}, 'העלאת תוצאות שכבר חושבו במערכת אחרת — כדי שיוצגו כאן (עמוד אישי, סשן, טלפון בימות).'),
+    el('div', { style: 'margin-top:6px' }, 'עמודות: game_id · processed_at · participant_id_phone · name · access_code · profile_fire/water/air/earth · archetype_id · archetype_score'),
+    el('div', { style: 'margin-top:6px' }, 'archetype_id = מספר סוג האישיות · archetype_score = אחוז הסטיה. מיובא לפי מזהה משחק; ייבוא חוזר מעדכן.'),
+  ]));
+  const file = el('input', { type: 'file', accept: '.csv,.txt', style: 'padding:8px' });
+  form.appendChild(el('div', { class: 'field', style: 'margin-top:12px' }, [el('label', {}, 'קובץ CSV'), file]));
+  const status = el('div', { style: 'margin:8px 0;color:var(--muted)' });
+  form.appendChild(status);
+  form.appendChild(el('div', { class: 'row' }, [
+    el('button', { class: 'primary', onclick: async () => {
+      const f = file.files && file.files[0];
+      if (!f) return toast('בחר קובץ', true);
+      status.textContent = 'מעלה ומעבד…';
+      try {
+        const dataBase64 = await fileToBase64(f);
+        const r = await api.post('/api/results/import', { dataBase64 });
+        closeModal();
+        toast(`יובאו ${r.imported} משחקים · ${r.participants} משתתפים`);
+        const notes = [];
+        if (r.replaced) notes.push(`${r.replaced} מפגשים עודכנו`);
+        if (r.codeOnly) notes.push(`${r.codeOnly} ללא טלפון (לפי קוד)`);
+        if (r.noProfile) notes.push(`${r.noProfile} ללא פילוח`);
+        if (r.missingArchetype) notes.push(`${r.missingArchetype} עם סוג אישיות שלא קיים במאגר`);
+        if (notes.length) alert('פרטים:\n' + notes.join('\n') + (r.warnings && r.warnings.length ? '\n\nאזהרות:\n' + r.warnings.slice(0, 15).join('\n') : ''));
+        loadBatches();
+      } catch (e) { status.textContent = ''; toast(e.message, true); }
+    } }, 'ייבוא'),
+    el('button', { onclick: closeModal }, 'ביטול'),
+  ]));
+  openModal(form);
+});
 
 // ============================================================
 //  קלט Webhook — צפייה בקלט הגולמי שהמשחק שולח + הפירוש

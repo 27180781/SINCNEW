@@ -12,6 +12,7 @@ import { parsePersonalitiesInput } from './personalities-import.js';
 import { collectPhones, sendTzintuk, normalizePhone } from './tzintuk.js';
 import { sendMasaLink } from './masalink.js';
 import { sanitizeVariants, resolveVariant, applyVariantToMatch } from './variants.js';
+import { parseResultsInput } from './results-import.js';
 import { findLatestParticipantByPhone, buildIntroText, toYemotRead, toYemotIdList } from './intro.js';
 import { assignPersonalCodes, findByPersonalCode, findByPhone, computeInsights } from './insights.js';
 
@@ -525,6 +526,41 @@ export function createRouter(repo) {
     const okDel = await repo.deleteBatch(params.id);
     if (!okDel) return err('קבוצה לא נמצאה', 404);
     return ok({ deleted: params.id });
+  });
+
+  // ---- ייבוא תוצאות קיימות ממערכת אחרת (CSV) — יצירת מפגשים לתצוגה ----
+  add('POST', '/api/results/import', async ({ body }) => {
+    const [settings, personalities] = await Promise.all([repo.getSettings(), repo.allPersonalities()]);
+    const keys = elementKeysFrom(settings);
+    let parsed;
+    try {
+      parsed = parseResultsInput(body, { personalities, keys });
+    } catch (e) {
+      return err('כשל בקריאת הקובץ: ' + (e?.message || e));
+    }
+    const { games, stats, warnings } = parsed;
+    if (!games.length) return err('לא נמצאו תוצאות תקינות בקובץ. ' + (warnings || []).join(' '));
+
+    let created = 0, replaced = 0;
+    for (const g of games) {
+      // מניעת כפילות: מפגש קיים עם אותו gameId+sentAt מוחלף (ייבוא חוזר מעדכן)
+      const existing = g.gameId ? await repo.findGameBatch(g.gameId, g.sentAt) : null;
+      if (existing) { await repo.deleteBatch(existing.id); replaced++; }
+      const batch = {
+        id: newId('batch'),
+        name: `${g.gameName} · ${String(g.sentAt || '').slice(0, 10)}`,
+        createdAt: g.sentAt || new Date().toISOString(),
+        source: 'import',
+        gameId: g.gameId,
+        sentAt: g.sentAt,
+        game: { gameId: g.gameId, gameName: g.gameName, sentAt: g.sentAt, imported: true, participantCount: g.result.count },
+        participants: g.participants,
+        result: g.result,
+      };
+      await repo.addBatch(batch);
+      created++;
+    }
+    return ok({ imported: created, replaced, ...stats, warnings }, 201);
   });
 
   // ---- אינטגרציית משחק: קבלת תוצאות (webhook) ----

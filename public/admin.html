@@ -164,10 +164,16 @@
           </div>
         </div>
         <div class="card">
-          <h2>מבנה הקלט</h2>
-          <div class="muted-box" id="formatHelp"></div>
-          <h3 style="margin-top:14px">מפגשים שמורים</h3>
+          <div class="row">
+            <h2 style="margin:0">מפגשים שמורים</h2>
+            <div class="spacer"></div>
+            <button id="importResultsBtn" title="ייבוא תוצאות קיימות ממערכת אחרת (CSV)">⬆ ייבוא תוצאות (CSV)</button>
+          </div>
           <div id="batchesList"></div>
+          <details style="margin-top:12px">
+            <summary style="cursor:pointer;font-weight:700">מבנה הקלט (JSON ממערכת המשחק)</summary>
+            <div class="muted-box" id="formatHelp" style="margin-top:8px"></div>
+          </details>
         </div>
       </div>
       <div class="card" id="scoreResults" style="display:none">
