@@ -13,6 +13,7 @@ import { collectPhones, sendTzintuk, normalizePhone } from './tzintuk.js';
 import { sendMasaLink } from './masalink.js';
 import { sanitizeVariants, resolveVariant, applyVariantToMatch } from './variants.js';
 import { parseResultsInput } from './results-import.js';
+import { distributionReport } from './distribution.js';
 import { findLatestParticipantByPhone, buildIntroText, toYemotRead, toYemotIdList } from './intro.js';
 import { assignPersonalCodes, findByPersonalCode, findByPhone, computeInsights } from './insights.js';
 
@@ -961,6 +962,17 @@ export function createRouter(repo) {
   });
 
   // ---- סטטיסטיקה ללוח הבקרה ----
+  // ---- ניתוח פיזור והצעות לסוגים חדשים ----
+  add('GET', '/api/distribution', async () => {
+    const [settings, personalities, batches] = await Promise.all([
+      repo.getSettings(), repo.allPersonalities(), repo.allBatches(),
+    ]);
+    const keys = elementKeysFrom(settings);
+    const participants = [];
+    for (const b of batches) for (const r of b.result?.results || []) participants.push(r);
+    return ok(distributionReport(participants, personalities, keys));
+  });
+
   add('GET', '/api/stats', async () => {
     const [settings, questions, personalityCount, batches] = await Promise.all([
       repo.getSettings(), repo.listQuestions(), repo.countPersonalities(), repo.allBatches(),

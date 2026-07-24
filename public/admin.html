@@ -21,6 +21,7 @@
       <button data-tab="dashboard" class="active">לוח בקרה</button>
       <button data-tab="mapping">מיפוי יסודות</button>
       <button data-tab="personalities">סוגי אישיות</button>
+      <button data-tab="distribution">פיזור והצעות</button>
       <button data-tab="participants">שיוך משתתפים</button>
       <button data-tab="inbox">קלט Webhook</button>
       <button data-tab="settings">הגדרות</button>
@@ -88,6 +89,34 @@
         </div>
         <div id="personalitiesList"></div>
         <div class="row" id="persPager" style="justify-content:center;margin-top:12px"></div>
+      </div>
+    </section>
+
+    <!-- פיזור והצעות -->
+    <section class="tab-panel" id="tab-distribution">
+      <div class="card">
+        <div class="row">
+          <h2 style="margin:0">📊 ניתוח פיזור והצעות</h2>
+          <div class="spacer"></div>
+          <button id="refreshDistBtn">רענון</button>
+        </div>
+        <p><small>מנתח את כל התוצאות שנאספו, מזהה סוגי אישיות "עמוסים" (שבולעים יותר מדי משתתפים),
+          ומציע סוגים חדשים שמפצלים אותם — כדי לפזר את המשתתפים רחב יותר.</small></p>
+        <div id="distSummary"></div>
+      </div>
+      <div class="card">
+        <h3>סוגים לפי עומס</h3>
+        <div id="distTypes"></div>
+      </div>
+      <div class="card">
+        <div class="row">
+          <h3 style="margin:0">הצעות לסוגים חדשים</h3>
+          <div class="spacer"></div>
+          <button class="primary" id="applySuggestionsBtn">➕ הוסף סוגים נבחרים</button>
+        </div>
+        <p><small>לכל סוג עמוס, המערכת מפצלת את המשתתפים שלו לתת-קבוצות ומציעה פרופיל חדש לכל אחת.
+          סמן את מה שתרצה, ערוך שם אם צריך, והוסף.</small></p>
+        <div id="distSuggestions"></div>
       </div>
     </section>
 

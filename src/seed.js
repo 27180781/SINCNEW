@@ -197,7 +197,7 @@ const ELEMENT_TRAIT = {
   earth: 'מונע מיציבות, סבלנות ומעשיות',
 };
 
-function makePersonality(profile) {
+export function makePersonality(profile) {
   const { fire, water, air, earth } = profile;
   const sorted = [...ELEMENT_KEYS].sort((a, b) => profile[b] - profile[a]);
   const top = sorted[0];
@@ -212,7 +212,8 @@ function makePersonality(profile) {
     name = BALANCED_NAMES[idx];
   } else {
     const nounList = ARCHETYPE_NOUNS[top];
-    const noun = nounList[(profile[top] / 10) % nounList.length];
+    // Math.floor: פרופיל שאינו כפולה של 10 (למשל מהצעות פיזור) לא ייצר אינדקס שברי (undefined)
+    const noun = nounList[Math.floor(profile[top] / 10) % nounList.length];
     if (profile[top] - profile[second] >= 40 || profile[second] === 0) {
       name = `${noun} הטהור`;
     } else {

@@ -1120,11 +1120,104 @@ document.getElementById('resetAllBtn').addEventListener('click', async () => {
 // ============================================================
 //  אתחול
 // ============================================================
+// ============================================================
+//  ניתוח פיזור והצעות
+// ============================================================
+async function loadDistribution() {
+  const box = document.getElementById('distSummary');
+  box.innerHTML = 'טוען…';
+  let d;
+  try { d = await api.get('/api/distribution'); } catch (e) { box.textContent = e.message; return; }
+  state.distribution = d;
+  renderDistribution(d);
+}
+
+function renderDistribution(d) {
+  const sum = document.getElementById('distSummary');
+  sum.innerHTML = '';
+  if (!d.total) { sum.appendChild(el('div', { class: 'empty' }, 'אין עדיין תוצאות לניתוח. ייבא/קלוט משחקים תחילה.')); document.getElementById('distTypes').innerHTML = ''; document.getElementById('distSuggestions').innerHTML = ''; return; }
+
+  const improved = d.suggestions.length && d.effectiveAfter > d.effectiveBefore;
+  sum.appendChild(el('div', { class: 'grid cols-2' }, [
+    el('div', { class: 'card stat' }, [
+      el('div', { class: 'num' }, d.suggestions.length ? `${d.effectiveBefore} → ${d.effectiveAfter}` : `${d.effectiveBefore}`),
+      el('div', { class: 'lbl', style: improved ? 'color:var(--earth)' : '' }, 'סוגים אפקטיביים (גבוה = מפוזר יותר) — לפני ← אחרי ההצעות'),
+    ]),
+    el('div', { class: 'card stat' }, [
+      el('div', { class: 'num' }, `${d.top10Before}%`),
+      el('div', { class: 'lbl' }, 'מהמשתתפים ב-10 הסוגים הגדולים (נמוך = מפוזר יותר)'),
+    ]),
+  ]));
+  sum.appendChild(el('div', { class: 'muted-box', style: 'margin-top:10px' },
+    `נותחו ${d.total} משתתפים · ${d.distinctUsed} סוגים בשימוש מתוך ${d.availableTypes} · ${d.overloadedCount} סוגים עמוסים (סף ${d.threshold}+ משתתפים).`));
+
+  // פיזור לפי יסוד דומיננטי
+  const maxDom = Math.max(1, ...ELEMENT_ORDER.map((k) => d.dominantSplit[k] || 0));
+  const dom = el('div', { style: 'margin-top:12px' }, [el('div', { style: 'font-weight:700;margin-bottom:6px' }, 'פיזור לפי יסוד דומיננטי')]);
+  ELEMENT_ORDER.forEach((k) => {
+    const c = d.dominantSplit[k] || 0;
+    dom.appendChild(el('div', { class: 'meter' }, [
+      el('div', { class: 'meter-head' }, [el('span', {}, `${elEmoji(k)} ${elLabel(k)}`), el('strong', {}, String(c))]),
+      el('div', { class: 'bar' }, el('span', { style: `width:${Math.round((c / maxDom) * 100)}%;background:${elColor(k)}` })),
+    ]));
+  });
+  sum.appendChild(dom);
+
+  // טבלת סוגים לפי עומס
+  const tBox = document.getElementById('distTypes');
+  tBox.innerHTML = '';
+  const t = el('table');
+  t.innerHTML = '<thead><tr><th>מס׳</th><th>סוג אישיות</th><th>משתתפים</th><th>%</th><th>סטייה ממוצעת</th></tr></thead>';
+  const tb = el('tbody');
+  d.perType.forEach((r) => {
+    tb.appendChild(el('tr', { style: r.overloaded ? 'background:#fff5f0' : '' }, [
+      el('td', {}, el('span', { class: 'badge' }, r.number != null ? String(r.number) : '—')),
+      el('td', {}, [el('span', {}, r.name), r.overloaded ? el('span', { class: 'badge', style: 'margin-inline-start:6px;background:#fde2d5;color:#c2410c' }, 'עמוס') : null]),
+      el('td', {}, String(r.count)),
+      el('td', {}, `${r.percent}%`),
+      el('td', {}, `${r.avgDeviation}`),
+    ]));
+  });
+  t.appendChild(tb); tBox.appendChild(t);
+
+  // הצעות
+  const sBox = document.getElementById('distSuggestions');
+  sBox.innerHTML = '';
+  if (!d.suggestions.length) { sBox.appendChild(el('div', { class: 'empty' }, 'אין הצעות כרגע — הפיזור סביר, או שאין מספיק נתונים.')); return; }
+  d.suggestions.forEach((s, i) => {
+    s._selected = true; // ברירת מחדל: נבחר
+    const nameI = el('input', { value: s.name, oninput: (e) => { s.name = e.target.value; }, style: 'max-width:220px' });
+    const chk = el('input', { type: 'checkbox', checked: 'checked', style: 'width:auto', onchange: (e) => { s._selected = e.target.checked; } });
+    const pctText = ELEMENT_ORDER.map((k) => `${elEmoji(k)} ${s.profile[k] || 0}%`).join(' · ');
+    sBox.appendChild(el('div', { class: 'row', style: 'border-bottom:1px solid var(--line);padding:10px 0;gap:10px;align-items:center' }, [
+      el('label', { style: 'display:flex;align-items:center;gap:6px' }, [chk]),
+      miniProfile(s.profile),
+      el('div', { style: 'flex:1' }, [
+        nameI,
+        el('div', {}, el('small', {}, `${pctText} · מפצל את "${s.splitsType}" (${s.memberCount} משתתפים)`)),
+      ]),
+    ]));
+  });
+}
+
+document.getElementById('refreshDistBtn').addEventListener('click', loadDistribution);
+document.getElementById('applySuggestionsBtn').addEventListener('click', async () => {
+  const sel = (state.distribution?.suggestions || []).filter((s) => s._selected);
+  if (!sel.length) return toast('לא נבחרו הצעות', true);
+  const personalities = sel.map((s) => ({ name: (s.name || '').trim() || 'סוג חדש', description: s.description || '', profile: s.profile }));
+  try {
+    const r = await api.post('/api/personalities/bulk', { mode: 'append', personalities });
+    toast(`נוספו ${r.imported} סוגים`);
+    loadDistribution();
+  } catch (e) { toast(e.message, true); }
+});
+
 const loaders = {
   dashboard: loadDashboard,
   mapping: loadMapping,
   inbox: loadInbox,
   personalities: () => loadPersonalities(),
+  distribution: loadDistribution,
   participants: () => { renderFormatHelp(); loadIntegration(); buildSimElements(); loadBatches(); if (!state.questions.length) api.get('/api/questions').then((q) => { state.questions = q; }); },
   settings: loadSettings,
 };
