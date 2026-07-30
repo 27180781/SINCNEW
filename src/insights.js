@@ -71,7 +71,7 @@ export function findByPhone(batches, phone) {
  * מחשב תובנות אישיות:
  * - group:   כמה אחוז מהמפגש (הסשן) חולקים את אותו יסוד דומיננטי
  * - global:  כמה אחוז מכלל המשתתפים במערכת חולקים את היסוד הדומיננטי
- * - closest: המשתתף הקרוב ביותר (מרחק יסודות קטן ביותר) מבין כל השאר
+ * - closest: המשתתף הקרוב ביותר (מרחק יסודות קטן ביותר) — רק מתוך המפגש הנוכחי
  */
 export function computeInsights(target, targetBatch, allBatches, keys = DEFAULT_ELEMENT_KEYS) {
   const dom = target.dominant;
@@ -99,10 +99,10 @@ export function computeInsights(target, targetBatch, allBatches, keys = DEFAULT_
     percent: allResults.length ? round((globalSame / allResults.length) * 100) : 0,
   };
 
-  // הקרוב ביותר מבין השאר
+  // הקרוב ביותר מבין השאר — רק מתוך המפגש הנוכחי (אותו סשן)
   const maxD = maxDistance(keys) || 1;
   let closest = null;
-  for (const r of allResults) {
+  for (const r of groupResults) {
     if (resultKey(r) === selfKey) continue; // דילוג על עצמי
     const d = distance(targetProfile, r.percentagesRaw || r.percentages || {}, keys);
     if (!closest || d < closest.distance) {

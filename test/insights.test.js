@@ -113,3 +113,14 @@ test('findByPhone: מעדיף את התוצאה האחרונה עם מענה (ר
   ];
   assert.equal(findByPhone(batches, '0502222222').result.name, 'טוב');
 });
+
+test('computeInsights: הקרוב ביותר רק מהמפגש הנוכחי (לא מכלל המערכת)', () => {
+  const target = R({ phone: '0501000000', name: 'מטרה', pct: { fire: 80, water: 20, air: 0, earth: 0 }, dominant: 'fire' });
+  const groupOther = R({ phone: '0501000001', name: 'בקבוצה', pct: { fire: 60, water: 40, air: 0, earth: 0 }, dominant: 'fire' });
+  const batch = { createdAt: '2024-06-01T00:00:00Z', result: { results: [target, groupOther] } };
+  // משתתף במפגש אחר שקרוב הרבה יותר (79/21) — אסור שייבחר
+  const otherBatch = { createdAt: '2024-05-01T00:00:00Z', result: { results: [R({ phone: '0509999999', name: 'קרוב-אחר', pct: { fire: 79, water: 21, air: 0, earth: 0 }, dominant: 'fire' })] } };
+  const ins = computeInsights(target, batch, [batch, otherBatch], KEYS);
+  assert.equal(ins.closest.name, 'בקבוצה', 'הקרוב ביותר רק מהמפגש הנוכחי');
+  assert.equal(ins.global.total, 3, 'global עדיין סופר את כל המערכת');
+});

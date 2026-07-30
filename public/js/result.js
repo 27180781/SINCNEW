@@ -97,7 +97,7 @@ function render(d) {
     const box = el('div', { class: 'insight', style: 'margin-top:12px' });
     box.appendChild(el('div', { class: 'ic' }, '🤝'));
     const txt = el('div', {});
-    txt.appendChild(el('div', {}, [el('strong', {}, 'הכי קרוב אליך בפילוח: '), el('span', {}, who)]));
+    txt.appendChild(el('div', {}, [el('strong', {}, 'הכי קרוב אליך במפגש: '), el('span', {}, who)]));
     if (c.dominant) txt.appendChild(el('div', {}, el('small', {}, `יסוד דומיננטי ${elLabel(c.dominant)}`)));
     box.appendChild(txt);
     card.appendChild(box);
