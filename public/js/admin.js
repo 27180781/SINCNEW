@@ -748,25 +748,49 @@ function renderScoreResults(result) {
 }
 
 async function loadBatches() {
-  const batches = await api.get('/api/batches');
+  state.allBatches = await api.get('/api/batches');
+  renderBatchTable();
+}
+function renderBatchTable() {
   const box = document.getElementById('batchesList');
   box.innerHTML = '';
-  if (!batches.length) { box.appendChild(el('div', { class: 'empty' }, 'אין מפגשים שמורים')); return; }
-  batches.slice().reverse().forEach((b) => {
-    box.appendChild(el('div', { class: 'row', style: 'border-bottom:1px solid var(--line);padding:6px 0' }, [
-      el('div', {}, [
-        b.source === 'game' ? el('span', { class: 'badge', title: 'התקבל ממערכת המשחק' }, '🎮 משחק') : null,
-        b.source === 'import' ? el('span', { class: 'badge', style: 'background:#e6f0ff;color:#2a5db0', title: 'יובא ממערכת אחרת' }, '📥 ייבוא') : null,
-        el('strong', { style: 'margin-inline-start:6px' }, b.name),
-        el('div', {}, el('small', {}, `${b.count} משתתפים · ${new Date(b.createdAt).toLocaleDateString('he-IL')}`)),
-      ]),
-      el('div', { class: 'spacer' }),
-      b.gameId ? el('a', { class: 'btn small', href: `/session/${encodeURIComponent(b.gameId)}`, target: '_blank', title: 'קישור ציבורי לצפייה בתוצאות המפגש' }, '🔗 קישור סשן') : null,
-      el('button', { class: 'small', onclick: () => viewBatch(b.id) }, 'הצגה'),
-      el('button', { class: 'small danger', onclick: async () => { if (confirm('למחוק?')) { await api.del(`/api/batches/${b.id}`); loadBatches(); } } }, '✕'),
+  const all = (state.allBatches || []).slice().reverse();
+  const g = (document.getElementById('batchSearchGame').value || '').trim().toLowerCase();
+  const em = (document.getElementById('batchSearchEmail').value || '').trim().toLowerCase();
+  const list = all.filter((b) =>
+    (!g || String(b.gameId || '').toLowerCase().includes(g)) &&
+    (!em || String(b.email || '').toLowerCase().includes(em)));
+  document.getElementById('batchCount').textContent = g || em ? `${list.length} / ${all.length}` : String(all.length);
+  if (!all.length) { box.appendChild(el('div', { class: 'empty' }, 'אין מפגשים שמורים')); return; }
+  if (!list.length) { box.appendChild(el('div', { class: 'empty' }, 'אין מפגשים התואמים לחיפוש')); return; }
+
+  const t = el('table');
+  t.innerHTML = '<thead><tr><th>מקור</th><th>מפגש</th><th>מזהה משחק</th><th>מייל מנהל</th><th>משתתפים</th><th>תאריך</th><th></th></tr></thead>';
+  const tb = el('tbody');
+  list.forEach((b) => {
+    const badge = b.source === 'game' ? el('span', { class: 'badge', title: 'ממערכת המשחק' }, '🎮')
+      : b.source === 'import' ? el('span', { class: 'badge', style: 'background:#e6f0ff;color:#2a5db0', title: 'יובא' }, '📥')
+      : el('span', { class: 'badge', title: 'ידני' }, '✍');
+    tb.appendChild(el('tr', {}, [
+      el('td', {}, badge),
+      el('td', {}, el('strong', {}, b.name)),
+      el('td', {}, b.gameId ? el('code', { title: b.gameId, style: 'font-size:.78rem' }, String(b.gameId).length > 12 ? String(b.gameId).slice(0, 12) + '…' : b.gameId) : el('small', {}, '—')),
+      el('td', {}, b.email ? el('small', {}, b.email) : el('small', {}, '—')),
+      el('td', {}, String(b.count)),
+      el('td', {}, el('small', {}, new Date(b.createdAt).toLocaleDateString('he-IL'))),
+      el('td', {}, el('div', { class: 'row', style: 'gap:4px;flex-wrap:nowrap' }, [
+        b.gameId ? el('a', { class: 'btn small', href: `/session/${encodeURIComponent(b.gameId)}`, target: '_blank', title: 'קישור ציבורי לסשן' }, '🔗') : null,
+        el('button', { class: 'small', onclick: () => viewBatch(b.id) }, 'הצגה'),
+        el('button', { class: 'small danger', onclick: async () => { if (confirm('למחוק את המפגש?')) { await api.del(`/api/batches/${b.id}`); loadBatches(); } } }, '✕'),
+      ])),
     ]));
   });
+  t.appendChild(tb); box.appendChild(t);
 }
+['batchSearchGame', 'batchSearchEmail'].forEach((id) => {
+  const inp = document.getElementById(id);
+  if (inp) inp.addEventListener('input', () => renderBatchTable());
+});
 async function viewBatch(id) {
   const b = await api.get(`/api/batches/${id}`);
   state.lastScore = b.result;

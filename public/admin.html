@@ -175,35 +175,38 @@
           </ol>
         </div>
       </div>
-      <div class="grid cols-2">
-        <div class="card">
-          <h2>קלט JSON של משתתפים</h2>
-          <p><small>הזינו רשימת משתתפים ותשובותיהם. המערכת תשקלל ותצמיד סוג אישיות לכל אחד.</small></p>
-          <div class="field">
-            <label>שם המפגש (רשות)</label>
-            <input id="batchName" placeholder="למשל: כיתה א' 2026" />
-          </div>
-          <textarea id="participantsJson" spellcheck="false"></textarea>
-          <div class="row" style="margin-top:10px">
-            <button class="primary" id="runScoreBtn">שקלול</button>
-            <button id="saveBatchBtn">שמירת מפגש</button>
-            <button id="loadExampleBtn" class="ghost">טעינת דוגמה</button>
-            <div class="spacer"></div>
-            <button id="downloadResultsBtn" class="ghost" disabled>הורדת תוצאות</button>
-          </div>
+      <div class="card">
+        <div class="row">
+          <h2 style="margin:0">מפגשים שמורים</h2>
+          <span class="badge" id="batchCount"></span>
+          <div class="spacer"></div>
+          <button id="importResultsBtn" title="ייבוא תוצאות קיימות ממערכת אחרת (CSV)">⬆ ייבוא תוצאות (CSV)</button>
         </div>
-        <div class="card">
-          <div class="row">
-            <h2 style="margin:0">מפגשים שמורים</h2>
-            <div class="spacer"></div>
-            <button id="importResultsBtn" title="ייבוא תוצאות קיימות ממערכת אחרת (CSV)">⬆ ייבוא תוצאות (CSV)</button>
-          </div>
-          <div id="batchesList"></div>
-          <details style="margin-top:12px">
-            <summary style="cursor:pointer;font-weight:700">מבנה הקלט (JSON ממערכת המשחק)</summary>
-            <div class="muted-box" id="formatHelp" style="margin-top:8px"></div>
-          </details>
+        <div class="row" style="margin-top:8px">
+          <input id="batchSearchGame" placeholder="🔎 חיפוש לפי מזהה משחק…" style="max-width:260px" />
+          <input id="batchSearchEmail" placeholder="🔎 חיפוש לפי מייל מנהל…" style="max-width:260px" />
         </div>
+        <div id="batchesList" style="margin-top:12px;overflow-x:auto"></div>
+      </div>
+      <div class="card">
+        <h2>קלט JSON של משתתפים (שקלול ידני)</h2>
+        <p><small>הזינו רשימת משתתפים ותשובותיהם. המערכת תשקלל ותצמיד סוג אישיות לכל אחד.</small></p>
+        <div class="field">
+          <label>שם המפגש (רשות)</label>
+          <input id="batchName" placeholder="למשל: כיתה א' 2026" />
+        </div>
+        <textarea id="participantsJson" spellcheck="false"></textarea>
+        <div class="row" style="margin-top:10px">
+          <button class="primary" id="runScoreBtn">שקלול</button>
+          <button id="saveBatchBtn">שמירת מפגש</button>
+          <button id="loadExampleBtn" class="ghost">טעינת דוגמה</button>
+          <div class="spacer"></div>
+          <button id="downloadResultsBtn" class="ghost" disabled>הורדת תוצאות</button>
+        </div>
+        <details style="margin-top:12px">
+          <summary style="cursor:pointer;font-weight:700">מבנה הקלט (JSON ממערכת המשחק)</summary>
+          <div class="muted-box" id="formatHelp" style="margin-top:8px"></div>
+        </details>
       </div>
       <div class="card" id="scoreResults" style="display:none">
         <h2>תוצאות השקלול</h2>

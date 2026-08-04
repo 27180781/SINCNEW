@@ -142,6 +142,7 @@ async function checkRepo(repo) {
   assert.equal(await repo.findGameBatch('G1', 'תאריך-אחר'), null);
   const summary = await repo.listBatches();
   assert.equal(summary[0].source, 'game', 'listBatches כולל source');
+  assert.equal(summary[0].email, 'operator@example.com', 'listBatches כולל email (מנהל)');
   await repo.deleteBatch('gb1');
 
   // הגדרות — שמירה
